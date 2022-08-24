@@ -1,0 +1,19 @@
+{
+  "type": "mqtt",
+  "config": {
+    "clientId": "A client ID",
+    "qos": 1,
+    "user": "A user ID",
+    "password": "Stream Password",
+    "provider": {
+      "host": "localhost",
+      "port": 1883,
+      "protocol": "tls"
+    },
+    "cleanness": false,
+    "topics": [
+      "Topic1",
+      "Topic2"
+    ]
+  }
+}
