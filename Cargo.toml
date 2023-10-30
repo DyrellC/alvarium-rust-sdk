@@ -22,4 +22,4 @@ futures = {version = "0.3.8", default-features = false}
 async-trait = "0.1.57"
 base64 = "0.13.0"
 chrono = "0.4.22"
-alvarium-annotator = { path = "../AlvariumAnnotator" }
+alvarium-annotator = { git = "https://github.com/DyrellC/AlvariumAnnotator" }
