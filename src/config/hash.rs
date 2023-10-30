@@ -1,4 +1,4 @@
-use crate::constants::HashType;
+use crate::annotations::constants::HashType;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -8,7 +8,7 @@ pub struct HashInfo<'a> {
 }
 
 impl HashInfo<'_> {
-    fn validate(&self) -> bool {
+    pub fn validate(&self) -> bool {
         self.hash_type.validate()
     }
 }

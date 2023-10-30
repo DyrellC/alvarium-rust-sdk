@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+/*use serde::{Serialize, Deserialize};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct HashType<'a>(pub &'a str);
@@ -51,3 +51,19 @@ impl AnnotationType<'_> {
         self == &ANNOTATION_PKI || self == &ANNOTATION_SOURCE || self == &ANNOTATION_TLS || self == &ANNOTATION_TPM
     }
 }
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SdkAction<'a>(pub &'a str);
+
+pub const ACTION_CREATE: SdkAction = SdkAction("create");
+pub const ACTION_MUTATE: SdkAction = SdkAction("mutate");
+pub const ACTION_TRANSIT: SdkAction = SdkAction("transit");
+pub const ACTION_PUBLISH: SdkAction = SdkAction("publish");
+
+impl SdkAction<'_> {
+    pub(crate) fn validate(&self) -> bool {
+        self == &ACTION_CREATE || self == &ACTION_MUTATE || self == &ACTION_TRANSIT || self == &ACTION_PUBLISH
+    }
+}
+
+*/

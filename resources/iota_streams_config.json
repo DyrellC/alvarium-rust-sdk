@@ -11,6 +11,7 @@
         "protocol": "https",
         "port": 443
       },
-      "encoding": "utf-8"
+      "encoding": "utf-8",
+      "topic": "Publisher Unique Topic"
     }
 }

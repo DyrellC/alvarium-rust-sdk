@@ -1,7 +1,7 @@
-use crate::annotations::{Annotation, mock_annotation};
+use crate::annotations::{mock_annotation};
 use crate::config;
 use crate::config::SignatureInfo;
-use crate::constants::{self, HashType, MD5_HASH, SHA256_HASH};
+use crate::annotations::{Annotation, constants::{self, HashType, MD5_HASH, SHA256_HASH}};
 use crate::providers::hash_provider::{MD5Provider, Sha256Provider, NoneProvider, HashProvider};
 use crate::providers::sign_provider::{Ed25519Provider, SignProvider};
 

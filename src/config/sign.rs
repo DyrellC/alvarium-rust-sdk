@@ -1,4 +1,4 @@
-use crate::constants::KeyAlgorithm;
+use crate::annotations::constants::KeyAlgorithm;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]

@@ -8,25 +8,33 @@ use serde::{Serialize, Deserialize};
 use crate::{config, constants};
 use crate::providers::sign_provider::{Ed25519Provider, SignProvider};
 
+use crate::annotations::constants::{ED25519_KEY, StreamType};
+
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct StreamInfo<'a> {
+pub struct StreamInfo<'a> {
     #[serde(borrow)]
     #[serde(rename="type")]
-    pub(crate) stream_type: crate::constants::StreamType<'a>,
+    pub(crate) stream_type: StreamType<'a>,
     pub(crate) config: StreamConfig<'a>
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct UrlInfo<'a> {
+pub struct UrlInfo<'a> {
     #[serde(borrow)]
-    host: &'a str,
-    port: usize,
-    protocol: &'a str
+    pub(crate) host: &'a str,
+    pub(crate) port: usize,
+    pub(crate) protocol: &'a str
+}
+
+impl UrlInfo<'_> {
+    pub fn uri(&self) -> String {
+        format!("{}://{}:{}", self.protocol, self.host, self.port)
+    }
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum StreamConfig<'a> {
+pub enum StreamConfig<'a> {
     #[serde(borrow)]
     IotaStreams(IotaStreamsConfig<'a>),
     MQTT(MqttStreamConfig<'a>),
@@ -42,7 +50,7 @@ pub(crate) struct Signable {
 use crypto::signatures::ed25519::SecretKey;
 
 impl Signable {
-    pub(crate) fn new(seed: String, signature: String) -> Self {
+    pub fn new(seed: String, signature: String) -> Self {
         Signable { seed, signature }
     }
 
@@ -52,7 +60,7 @@ impl Signable {
         }
 
         match key.key_type {
-            constants::ED25519_KEY => {
+            ED25519_KEY => {
                 match std::fs::read_to_string(key.path) {
                     Ok(pub_key) =>
                         Ed25519Provider::verify(&pub_key, self.seed.as_bytes(), self.signature.as_str()),
