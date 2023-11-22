@@ -10,7 +10,7 @@ tokio = { version = "1.32.0", features = ["rt", "macros"] }
 md5-rs = "0.1.5"
 hex = "0.4.3"
 #streams = { git = "https://github.com/iotaledger/streams", branch = "v2.0-dev", default-features = false, features = ["tangle-client"]}
-streams = { git = "https://github.com/Immutable-Futures/streams", branch = "develop" }
+streams = { git = "https://github.com/Immutable-Futures/streams", branch = "develop", default-features = false, features = ["utangle-client", "did"] }
 serde = "1.0.143"
 serde_json = "1.0.83"
 gethostname = "0.2.3"

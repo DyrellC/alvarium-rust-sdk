@@ -5,7 +5,7 @@ pub use iota_streams::*;
 pub use mqtt::*;
 
 use serde::{Serialize, Deserialize};
-use crate::{config, constants};
+use crate::config;
 use crate::providers::sign_provider::{Ed25519Provider, SignProvider};
 
 use crate::annotations::constants::{ED25519_KEY, StreamType};
@@ -47,10 +47,8 @@ pub(crate) struct Signable {
     signature: String
 }
 
-use crypto::signatures::ed25519::SecretKey;
-
 impl Signable {
-    pub fn new(seed: String, signature: String) -> Self {
+    pub(crate) fn new(seed: String, signature: String) -> Self {
         Signable { seed, signature }
     }
 
@@ -70,42 +68,54 @@ impl Signable {
             _ => Err(format!("unrecognized key type"))
         }
     }
+
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        // Strings should not fail to serde
+        // TODO: Verify that this is the case
+        serde_json::to_vec(&self).unwrap()
+    }
 }
 
 
-#[test]
-fn verify_signable() {
-    let config_file = std::fs::read("resources/test_config.json").unwrap();
-    let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+#[cfg(test)]
+mod config_tests {
+    use crypto::signatures::ed25519::SecretKey;
+    use super::{config, Signable};
 
-    let priv_key_file = std::fs::read(config.signature.private_key_info.path).unwrap();
-    let priv_key_bytes = hex::decode(String::from_utf8(priv_key_file).unwrap()).unwrap();
-    let priv_key = SecretKey::from_bytes(<[u8;32]>::try_from(priv_key_bytes.as_slice()).unwrap());
+    #[test]
+    fn verify_signable() {
+        let config_file = std::fs::read("resources/test_config.json").unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
 
-    let data = "A data packet to sign".to_string();
-    let sig = priv_key.sign(data.as_bytes());
+        let priv_key_file = std::fs::read(config.signature.private_key_info.path).unwrap();
+        let priv_key_bytes = hex::decode(String::from_utf8(priv_key_file).unwrap()).unwrap();
+        let priv_key = SecretKey::from_bytes(<[u8; 32]>::try_from(priv_key_bytes.as_slice()).unwrap());
 
-    let signable = Signable {
-        seed: data,
-        signature: hex::encode(sig.to_bytes())
-    };
+        let data = "A data packet to sign".to_string();
+        let sig = priv_key.sign(data.as_bytes());
 
-    assert!(signable.verify_signature(&config.signature.public_key_info).unwrap())
-}
+        let signable = Signable {
+            seed: data,
+            signature: hex::encode(sig.to_bytes())
+        };
 
-#[test]
-fn failed_verification_signable() {
-    let config_file = std::fs::read("resources/test_config.json").unwrap();
-    let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
-    let bad_priv_key = SecretKey::generate().unwrap();
+        assert!(signable.verify_signature(&config.signature.public_key_info).unwrap())
+    }
 
-    let data = "A data packet to sign".to_string();
-    let sig = bad_priv_key.sign(data.as_bytes());
+    #[test]
+    fn failed_verification_signable() {
+        let config_file = std::fs::read("resources/test_config.json").unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let bad_priv_key = SecretKey::generate().unwrap();
 
-    let signable = Signable {
-        seed: data,
-        signature: hex::encode(sig.to_bytes())
-    };
+        let data = "A data packet to sign".to_string();
+        let sig = bad_priv_key.sign(data.as_bytes());
 
-    assert!(!signable.verify_signature(&config.signature.public_key_info).unwrap())
+        let signable = Signable {
+            seed: data,
+            signature: hex::encode(sig.to_bytes())
+        };
+
+        assert!(!signable.verify_signature(&config.signature.public_key_info).unwrap())
+    }
 }

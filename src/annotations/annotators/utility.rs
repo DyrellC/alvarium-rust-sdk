@@ -1,5 +1,3 @@
-use crate::annotations::{mock_annotation};
-use crate::config;
 use crate::config::SignatureInfo;
 use crate::annotations::{Annotation, constants::{self, HashType, MD5_HASH, SHA256_HASH}};
 use crate::providers::hash_provider::{MD5Provider, Sha256Provider, NoneProvider, HashProvider};
@@ -44,12 +42,21 @@ where
 }
 
 
-#[test]
-fn sign_and_verify_annotation() {
-    let config_file = std::fs::read("resources/test_config.json").unwrap();
-    let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+#[cfg(test)]
+mod annotation_utility_tests {
+    use crate::{
+        annotations::{mock_annotation},
+        config,
+    };
+    use super::sign_annotation;
 
-    let annotation = mock_annotation();
-    let signature = sign_annotation(&config.signature, &annotation);
-    assert!(signature.is_ok())
+    #[test]
+    fn sign_and_verify_annotation() {
+        let config_file = std::fs::read("resources/test_config.json").unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+
+        let annotation = mock_annotation();
+        let signature = sign_annotation(&config.signature, &annotation);
+        assert!(signature.is_ok())
+    }
 }

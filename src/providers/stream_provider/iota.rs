@@ -1,14 +1,11 @@
-use crate::config::{IotaStreamsConfig, SdkInfo, Signable, StreamConfig, StreamInfo};
+use crate::config::{IotaStreamsConfig, StreamConfig, StreamInfo};
 use crate::providers::stream_provider::{MessageWrapper, Publisher};
-use streams::{Address, User, transport::utangle::Client, id::{Ed25519, Identity, Identifier}, Message};
+use streams::{Address, User, transport::utangle::Client, id::{Ed25519, Identifier}, Message};
 use core::str::FromStr;
-use std::any::Any;
 use std::thread::sleep;
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use futures::TryStreamExt;
-use crate::annotations::{AnnotationList, Annotator, constants::IOTA_STREAM};
-use crate::annotations::PkiAnnotator;
 
 const MAX_RETRIES: u8 = 100;
 
@@ -21,7 +18,7 @@ pub struct IotaPublisher<'a> {
 
 
 impl IotaPublisher<'_> {
-    async fn await_keyload(&mut self) -> Result<(), String> {
+    pub(crate) async fn await_keyload(&mut self) -> Result<(), String> {
         let mut i = 0;
         while i < MAX_RETRIES {
             let m = self.subscriber.messages();
@@ -40,6 +37,14 @@ impl IotaPublisher<'_> {
             i += 1;
         }
         Err("Did not find keyload, subscription may not have been processed correctly".to_string())
+    }
+
+    pub fn client(&mut self) -> &mut User<Client> {
+        &mut self.subscriber
+    }
+
+    pub fn identifier(&self) -> &Identifier {
+        &self.identifier
     }
 }
 
@@ -127,7 +132,12 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
         let bytes = serde_json::to_vec(&msg)
             .map_err(|e| e.to_string())?;
 
-        let packet = self.subscriber.send_signed_packet(self.cfg.topic, vec![],bytes).await
+        let packet = self.subscriber.message()
+            .with_payload(bytes)
+            .with_topic(self.cfg.topic)
+            .signed()
+            .send()
+            .await
             .map_err(|e| e.to_string())?;
 
         println!("Published new message: {}", packet.address());
@@ -135,6 +145,44 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
     }
 }
 
+// TODO: Migrate logic into oracle
+/*
+const DEMIA_SUB_URL: &'static str = "https://k1azl2450m.execute-api.us-east-1.amazonaws.com/test";
+#[derive(Debug, Serialize, Deserialize)]
+struct ResponseData {
+    did: String,
+    signing_fragment: String,
+    exchange_fragment: String
+}
+async fn get_demia_subscriber() -> Result<Identifier, String> {
+    let client = reqwest::Client::new();
+
+    let response: Value = client.get(DEMIA_SUB_URL.to_owned() + "/subscribers")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let body = response.get("body")
+        .ok_or("No body in response".to_string())?;
+    println!("Response: {:#}", response.get("body").unwrap());
+
+    let response: ResponseData = serde_json::from_value(body.clone())
+        .map_err(|e| e.to_string())?;
+
+    println!("Response1: {:?}", response);
+    let url_info = DIDUrlInfo::new(
+        response.did.try_into().unwrap(),
+        "",
+        &response.exchange_fragment,
+        &response.signing_fragment
+    );
+
+    Ok(Identifier::DID(url_info))
+
+}*/
 
 async fn get_announcement_id(uri: &str) -> Result<String, String> {
     #[derive(Serialize, Deserialize)]
@@ -170,33 +218,93 @@ async fn send_subscription_request(uri: &str, body: Vec<u8>) -> Result<(), Strin
 
 
 
-#[tokio::test]
-async fn new_iota_streams_provider() {
-    let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
-    let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
-    let mut author = IotaPublisher::new(sdk_info.stream.clone()).await.unwrap();
-    author.connect().await.unwrap();
-
-    let data = "A packet to send to the author".to_string();
-    let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
-    let signable = Signable::new(data, sig);
-
-    let mut list = AnnotationList { items: vec![] };
-    let pki_annotator = PkiAnnotator::new(sdk_info);
-    list.items.push(
-        pki_annotator.annotate(
-            &serde_json::to_vec(&signable).unwrap()
-        ).unwrap()
-    );
-
-    let data = MessageWrapper {
-        action: crate::annotations::constants::ACTION_CREATE,
-        message_type: std::any::type_name::<AnnotationList>(),
-        content: &base64::encode(&serde_json::to_vec(&list).unwrap()),
+#[cfg(test)]
+mod iota_test {
+    use crate::{
+        annotations::{AnnotationList, Annotator, PkiAnnotator},
+        config::{SdkInfo, StreamConfig, Signable}
     };
+    use streams::id::{PermissionDuration, Permissioned};
+    use super::{Client, IotaPublisher, Ed25519, Publisher, MessageWrapper, User};
+    const BASE_TOPIC: &'static str = "Base Topic";
 
-    println!("Publishing...");
-    author.publish(data).await.unwrap()
+    #[tokio::test]
+    async fn new_iota_streams_provider() {
+        let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
+        let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
+        let _annotator = mock_annotator(sdk_info).await;
+    }
+
+    #[tokio::test]
+    async fn streams_provider_publish() {
+        let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
+        let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
+        let mut annotator = mock_annotator(sdk_info.clone()).await;
+
+        let raw_data_msg = "A packet to send to subscribers".to_string();
+        let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
+        let signable = Signable::new(raw_data_msg, sig);
+
+        let mut list = AnnotationList { items: vec![] };
+        let pki_annotator = PkiAnnotator::new(&sdk_info);
+        list.items.push(
+            pki_annotator.annotate(
+                &serde_json::to_vec(&signable).unwrap()
+            ).unwrap()
+        );
+
+        let data = MessageWrapper {
+            action: crate::annotations::constants::ACTION_CREATE,
+            message_type: std::any::type_name::<AnnotationList>(),
+            content: &base64::encode(&serde_json::to_vec(&list).unwrap()),
+        };
+
+        println!("Publishing...");
+        annotator.publish(data).await.unwrap()
+    }
+
+    async fn mock_annotator(sdk_info: SdkInfo<'_>) -> IotaPublisher {
+        if let StreamConfig::IotaStreams(config) = &sdk_info.stream.config {
+            let client: Client = Client::new(&config.tangle_node.uri());
+            let mut seed = [0u8; 64];
+            crypto::utils::rand::fill(&mut seed).unwrap();
+
+            // Create an author to attach to
+            let mut streams_author = User::builder()
+                .with_transport(client)
+                .with_identity(Ed25519::from_seed(seed))
+                .build();
+            let announcement = streams_author.create_stream(BASE_TOPIC).await.unwrap();
+
+            let mut annotator = IotaPublisher::new(sdk_info.stream.clone()).await.unwrap();
+            // To test connect, there needs to be a running provider (oracle) so we'll manually test
+            // this part
+            //annotator.connect().await.unwrap();
+
+            // Annotator will receive the announcement and send a subscription, in connect() it would
+            // send a subscription request to the oracle, for now we assume permission for connection
+            annotator.client().receive_message(announcement.address()).await.unwrap();
+            let sub_message = annotator.client().subscribe().await.unwrap();
+
+            // Streams author accepts the subscription and dedicates a new branch specifically for
+            // the annotator
+            streams_author.receive_message(sub_message.address()).await.unwrap();
+            streams_author.new_branch(BASE_TOPIC, config.topic).await.unwrap();
+            streams_author.send_keyload(
+                config.topic,
+                vec![Permissioned::ReadWrite(annotator.identifier().clone(), PermissionDuration::Perpetual)],
+                vec![]
+            )
+                .await
+                .unwrap();
+
+            annotator.await_keyload().await.unwrap();
+            return annotator
+        } else {
+            panic!("Test configuration is not correct, should be IotaStreams config")
+        }
+    }
 }
+
 
 

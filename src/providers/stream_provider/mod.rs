@@ -1,6 +1,8 @@
 mod iota;
 //mod mqtt;
 
+pub use iota::IotaPublisher;
+
 use serde::{Serialize, Deserialize};
 use crate::annotations::constants::SdkAction;
 use crate::config::StreamInfo;

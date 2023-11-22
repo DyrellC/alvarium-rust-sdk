@@ -19,14 +19,14 @@
     "type": "iota",
     "config": {
       "provider": {
-        "host": "localhost",
-        "protocol": "http",
-        "port": 8080
-      },
-      "tangle": {
-        "host": "chrysalis-nodes.iota.org",
+        "host": "k1azl2450m.execute-api.us-east-1.amazonaws.com/test",
         "protocol": "https",
         "port": 443
+      },
+      "tangle": {
+        "host": "68.183.204.5",
+        "protocol": "http",
+        "port": 14102
       },
       "encoding": "utf-8",
       "topic": "Publisher Unique Topic"
