@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use crate::annotations::constants::SdkAction;
 use crate::config::StreamInfo;
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageWrapper<'a>{
     #[serde(borrow)]
     pub action: SdkAction<'a>,

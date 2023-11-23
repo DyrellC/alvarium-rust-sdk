@@ -23,7 +23,7 @@ impl<'a> SourceAnnotator<'a> {
 }
 
 impl<'a> Annotator for SourceAnnotator<'a> {
-    fn annotate(&self, data: &[u8]) -> Result<Annotation, String> {
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let key = derive_hash(self.hash, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
@@ -58,8 +58,8 @@ mod source_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let source_annotator_1 = SourceAnnotator::new(&config);
-        let source_annotator_2 = SourceAnnotator::new(&config2);
+        let mut source_annotator_1 = SourceAnnotator::new(&config);
+        let mut source_annotator_2 = SourceAnnotator::new(&config2);
         let valid_annotation = source_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = source_annotator_2.annotate(&serialised).unwrap();
 
@@ -82,7 +82,7 @@ mod source_tests {
         let signable = Signable::new(data, hex::encode(sig.to_bytes()));
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let source_annotator = SourceAnnotator::new(&config);
+        let mut source_annotator = SourceAnnotator::new(&config);
         let annotation = source_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

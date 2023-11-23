@@ -23,7 +23,7 @@ impl<'a> PkiAnnotator<'a> {
 }
 
 impl<'a> Annotator for PkiAnnotator<'a> {
-    fn annotate(&self, data: &[u8]) -> Result<Annotation, String> {
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let key = derive_hash(self.hash, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
@@ -66,8 +66,8 @@ mod pki_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let pki_annotator_1 = PkiAnnotator::new(&config);
-        let pki_annotator_2 = PkiAnnotator::new(&config2);
+        let mut pki_annotator_1 = PkiAnnotator::new(&config);
+        let mut pki_annotator_2 = PkiAnnotator::new(&config2);
         let valid_annotation = pki_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = pki_annotator_2.annotate(&serialised).unwrap();
 
@@ -90,7 +90,7 @@ mod pki_tests {
         let signable = Signable::new(data, hex::encode(sig.to_bytes()));
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let pki_annotator = PkiAnnotator::new(&config);
+        let mut pki_annotator = PkiAnnotator::new(&config);
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());
@@ -111,7 +111,7 @@ mod pki_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let pki_annotator = PkiAnnotator::new(&config);
+        let mut pki_annotator = PkiAnnotator::new(&config);
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

@@ -58,7 +58,7 @@ pub trait Tls<'a> {
     #[cfg(feature = "native-tls")]
     fn check_tls_stream_native(&self) -> bool;
     #[cfg(feature = "rustls")]
-    fn check_tls_stream_rustls(&self) -> bool;
+    fn check_tls_stream_rustls(&mut self) -> bool;
 }
 
 impl<'a> Tls<'a> for TlsAnnotator<'a> {
@@ -82,20 +82,31 @@ impl<'a> Tls<'a> for TlsAnnotator<'a> {
     }
 
     #[cfg(feature = "rustls")]
-    fn check_tls_stream_rustls(&self) -> bool {
-        if let Some(stream) = &self.stream {
+    fn check_tls_stream_rustls(&mut self) -> bool {
+        if let Some(stream) = self.stream.as_mut() {
             println!("Stream exists");
-            if let Some(conn) = &self.conn_rustls {
+            if let Some(conn) = self.conn_rustls.as_mut() {
                 println!("Connection exists");
+                let mut buf = [0; 1024];
                 let mut retries = 0;
+
                 loop {
+                    if conn.wants_write() {
+                        conn.write_tls(stream).unwrap();
+                    }
+
+                    if conn.wants_read() {
+                        if stream.read(&mut buf).unwrap() == 0 {
+                            break;
+                        }
+                        conn.read_tls(stream).unwrap();
+                    }
+
                     if !conn.is_handshaking() {
                         break;
                     } else {
                         retries += 1;
-                        std::thread::sleep(std::time::Duration::from_millis(400));
                         if retries == 5 {
-                            println!("Max retries attempted for handshake");
                             return false
                         }
                     }
@@ -131,7 +142,7 @@ impl<'a> Tls<'a> for TlsAnnotator<'a> {
 
 // Create a TLS Server Connection instance to determine if it is being used
 impl<'a> Annotator for TlsAnnotator<'a> {
-    fn annotate(&self, data: &[u8]) -> Result<Annotation, String> {
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let key = derive_hash(self.hash, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
@@ -176,8 +187,8 @@ mod tls_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let tls_annotator_1 = TlsAnnotator::new(&config);
-        let tls_annotator_2 = TlsAnnotator::new(&config2);
+        let mut tls_annotator_1 = TlsAnnotator::new(&config);
+        let mut tls_annotator_2 = TlsAnnotator::new(&config2);
         let valid_annotation = tls_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = tls_annotator_2.annotate(&serialised).unwrap();
 
@@ -226,7 +237,7 @@ mod tls_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let tls_annotator = TlsAnnotator::new(&config);
+        let mut tls_annotator = TlsAnnotator::new(&config);
         let annotation = tls_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

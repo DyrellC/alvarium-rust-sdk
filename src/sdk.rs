@@ -3,13 +3,13 @@ use crate::annotations::{Annotator, AnnotationList, constants::ACTION_CREATE};
 use crate::providers::stream_provider::{MessageWrapper, Publisher};
 
 pub struct SDK<'a, Ann: Annotator, Pub: Publisher<'a>> {
-    annotators: &'a [Ann],
+    annotators: &'a mut [Ann],
     pub cfg: SdkInfo<'a>,
     stream: Pub
 }
 
 impl<'a, Ann: Annotator, Pub: Publisher<'a>> SDK<'a, Ann, Pub> {
-    pub async fn new(cfg: SdkInfo<'a>, annotators: &'a [Ann]) -> Result<SDK<'a, Ann, Pub>, String> {
+    pub async fn new(cfg: SdkInfo<'a>, annotators: &'a mut [Ann]) -> Result<SDK<'a, Ann, Pub>, String> {
         let mut publisher = Pub::new(cfg.stream.clone()).await?;
         publisher.connect().await?;
         Ok(SDK {
@@ -21,7 +21,7 @@ impl<'a, Ann: Annotator, Pub: Publisher<'a>> SDK<'a, Ann, Pub> {
 
     pub async fn create(&mut self, data: &[u8]) -> Result<(), String> {
         let mut ann_list = AnnotationList::default();
-        for annotator in self.annotators {
+        for annotator in self.annotators.as_mut() {
             ann_list.items.push(annotator.annotate(data)?);
         }
 
@@ -70,7 +70,7 @@ mod sdk_tests {
 
         // Mocks SDK::new() without Pub::connect()
         let mut sdk = SDK {
-            annotators: &[annotator],
+            annotators: &mut [annotator],
             cfg: sdk_info,
             stream: publisher,
         };
