@@ -1,6 +1,8 @@
 {
   "annotators": [
-    "pki"
+    "pki",
+    "source",
+    "tls"
   ],
   "hash": {
     "type": "sha256"
@@ -31,5 +33,9 @@
       "encoding": "utf-8",
       "topic": "Publisher Unique Topic"
     }
+  },
+  "tls": {
+    "cert": "/path/to/cert.pem",
+    "key": "/path/to/key.pem"
   }
 }
