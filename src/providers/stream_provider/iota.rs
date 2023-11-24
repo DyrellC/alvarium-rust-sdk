@@ -76,11 +76,15 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
         }
     }
 
-    async fn close(&self) -> Result<(), String> {
+    async fn close(&mut self) -> Result<(), String> {
         // No need to disconnect from stream or drop anything
         Ok(())
     }
 
+    async fn reconnect(&mut self) -> Result<(), String> {
+        // No need to reconnect as disconnection does not occur
+        Ok(())
+    }
     async fn connect(&mut self) -> Result<(), String> {
         let announcement = get_announcement_id(&self.cfg.provider.uri()).await?;
         println!("Got announcement id");
@@ -129,6 +133,7 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
     }
 
     async fn publish(&mut self, msg: MessageWrapper<'_>) -> Result<(), String> {
+        println!("Message being published: {:?}", msg);
         let bytes = serde_json::to_vec(&msg)
             .map_err(|e| e.to_string())?;
 
@@ -232,21 +237,21 @@ mod iota_test {
     async fn new_iota_streams_provider() {
         let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
         let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
-        let _annotator = mock_annotator(sdk_info).await;
+        let _annotator = mock_provider(sdk_info).await;
     }
 
     #[tokio::test]
     async fn streams_provider_publish() {
         let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
         let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
-        let mut annotator = mock_annotator(sdk_info.clone()).await;
+        let mut publisher = mock_provider(sdk_info.clone()).await;
 
         let raw_data_msg = "A packet to send to subscribers".to_string();
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
         let signable = Signable::new(raw_data_msg, sig);
 
         let mut list = AnnotationList { items: vec![] };
-        let pki_annotator = PkiAnnotator::new(&sdk_info);
+        let mut pki_annotator = PkiAnnotator::new(&sdk_info);
         list.items.push(
             pki_annotator.annotate(
                 &serde_json::to_vec(&signable).unwrap()
@@ -260,10 +265,10 @@ mod iota_test {
         };
 
         println!("Publishing...");
-        annotator.publish(data).await.unwrap()
+        publisher.publish(data).await.unwrap()
     }
 
-    async fn mock_annotator(sdk_info: SdkInfo<'_>) -> IotaPublisher {
+    async fn mock_provider(sdk_info: SdkInfo<'_>) -> IotaPublisher {
         if let StreamConfig::IotaStreams(config) = &sdk_info.stream.config {
             let client: Client = Client::new(&config.tangle_node.uri());
             let mut seed = [0u8; 64];
