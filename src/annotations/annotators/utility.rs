@@ -1,3 +1,4 @@
+use alvarium_annotator::constants::KeyAlgorithm;
 use crate::config::SignatureInfo;
 use crate::annotations::{Annotation, constants::{self, HashType, MD5_HASH, SHA256_HASH}};
 use crate::providers::hash_provider::{MD5Provider, Sha256Provider, NoneProvider, HashProvider};
@@ -12,7 +13,7 @@ pub fn derive_hash(hash_type: HashType, data: &[u8]) -> String {
 }
 
 pub(crate) fn sign_annotation(key: &SignatureInfo, annotation: &Annotation) -> Result<String, String> {
-    match key.private_key_info.key_type {
+    match KeyAlgorithm(&key.private_key_info.key_type) {
         constants::ED25519_KEY => {
             let signature = serialise_and_sign(Ed25519Provider::sign, key, annotation)?;
             Ok(signature)
@@ -30,7 +31,7 @@ where
     let serialised = serde_json::to_vec(annotation);
     match serialised {
         Ok(annotation_bytes) => {
-            if let Ok(file) = std::fs::read(key.private_key_info.path) {
+            if let Ok(file) = std::fs::read(&key.private_key_info.path) {
                 if let Ok(priv_key) = String::from_utf8(file) {
                     return sign(&priv_key, &annotation_bytes)
                 }
@@ -52,8 +53,7 @@ mod annotation_utility_tests {
 
     #[test]
     fn sign_and_verify_annotation() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let annotation = mock_annotation();
         let signature = sign_annotation(&config.signature, &annotation);

@@ -2,24 +2,23 @@ use serde::{Serialize, Deserialize};
 use crate::config::UrlInfo;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct MqttStreamConfig<'a> {
-    #[serde(borrow)]
+pub struct MqttStreamConfig {
     #[serde(rename="clientId")]
-    pub client_id: &'a str,
+    pub client_id: String,
     #[serde(rename="boundedCap")]
     pub cap: usize,
     #[serde(rename="keepAlive")]
     pub keep_alive: u8,
     pub qos: u8,
-    pub user: &'a str,
-    password: &'a str,
-    pub provider: UrlInfo<'a>,
+    pub user: String,
+    password: String,
+    pub provider: UrlInfo,
     pub cleanness: bool,
-    pub topics: Vec<&'a str>
+    pub topics: Vec<String>
 }
 
-impl MqttStreamConfig<'_> {
+impl MqttStreamConfig {
     pub(crate) fn password(&self) -> &str {
-        self.password
+        &self.password
     }
 }

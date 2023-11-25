@@ -9,11 +9,11 @@ use crate::annotations::{derive_hash, sign_annotation};
 pub struct SourceAnnotator<'a> {
     hash: constants::HashType<'a>,
     kind: constants::AnnotationType<'a>,
-    sign: config::SignatureInfo<'a>,
+    sign: config::SignatureInfo,
 }
 
 impl<'a> SourceAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo<'a>) -> impl Annotator + 'a {
+    pub fn new(cfg: &config::SdkInfo) -> impl Annotator + 'a {
         SourceAnnotator {
             hash: cfg.hash.hash_type,
             kind: constants::ANNOTATION_SOURCE,
@@ -46,8 +46,7 @@ mod source_tests {
 
     #[test]
     fn valid_and_invalid_source_annotator() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
         config2.hash.hash_type = constants::HashType("Not a known hash type");
@@ -70,11 +69,10 @@ mod source_tests {
 
     #[test]
     fn make_source_annotation() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let data = String::from("Some random data");
-        let priv_key_file = std::fs::read(config.signature.private_key_info.path).unwrap();
+        let priv_key_file = std::fs::read(&config.signature.private_key_info.path).unwrap();
         let priv_key_string = String::from_utf8(priv_key_file).unwrap();
         let priv_key = get_priv_key(&priv_key_string).unwrap();
         let sig = priv_key.sign(data.as_bytes());

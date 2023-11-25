@@ -7,7 +7,7 @@ use crate::annotations::{PkiAnnotator, SourceAnnotator, TlsAnnotator, TpmAnnotat
 use crate::config::SdkInfo;
 
 
-pub fn new_annotator<'a>(kind: AnnotationType, cfg: SdkInfo<'a>) -> Result<Box<dyn Annotator + 'a>, String> {
+pub fn new_annotator<'a>(kind: AnnotationType, cfg: SdkInfo) -> Result<Box<dyn Annotator + 'a>, String> {
     match kind {
         constants::ANNOTATION_SOURCE => Ok(Box::new(SourceAnnotator::new(&cfg))),
         constants::ANNOTATION_PKI => Ok(Box::new(PkiAnnotator::new(&cfg))),

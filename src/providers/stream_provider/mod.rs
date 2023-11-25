@@ -7,7 +7,7 @@ pub use mqtt::MqttPublisher;
 
 use serde::{Serialize, Deserialize};
 use crate::annotations::constants::SdkAction;
-use crate::config::StreamInfo;
+use crate::config::StreamConfigWrapper;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageWrapper<'a>{
@@ -20,8 +20,9 @@ pub struct MessageWrapper<'a>{
 
 
 #[async_trait::async_trait(?Send)]
-pub trait Publisher<'a>: Sized {
-    async fn new(cfg: StreamInfo<'a>) -> Result<Self, String>;
+pub trait Publisher: Sized {
+    type StreamConfig: StreamConfigWrapper;
+    async fn new(cfg: &Self::StreamConfig) -> Result<Self, String>;
     async fn close(&mut self) -> Result<(), String>;
     async fn connect(&mut self) -> Result<(), String>;
 

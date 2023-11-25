@@ -10,14 +10,14 @@ use futures::TryStreamExt;
 const MAX_RETRIES: u8 = 100;
 
 
-pub struct IotaPublisher<'a> {
-    cfg: IotaStreamsConfig<'a>,
+pub struct IotaPublisher {
+    cfg: IotaStreamsConfig,
     subscriber: User<Client>,
     identifier: Identifier,
 }
 
 
-impl IotaPublisher<'_> {
+impl IotaPublisher {
     pub(crate) async fn await_keyload(&mut self) -> Result<(), String> {
         let mut i = 0;
         while i < MAX_RETRIES {
@@ -49,11 +49,12 @@ impl IotaPublisher<'_> {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a> Publisher<'a> for IotaPublisher<'a> {
-    async fn new(cfg: StreamInfo<'a>) -> Result<IotaPublisher<'a>, String> {
-        match cfg.config {
+impl Publisher for IotaPublisher {
+    type StreamConfig = StreamInfo;
+    async fn new(cfg: &StreamInfo) -> Result<IotaPublisher, String> {
+        match &cfg.config {
             StreamConfig::IotaStreams(cfg) => {
-                let client = Client::new(&cfg.tangle_node.uri());
+                let client = Client::new(cfg.tangle_node.uri());
                 let mut seed = [0u8; 64];
                 crypto::utils::rand::fill(&mut seed)
                     .map_err(|e| e.to_string())?;
@@ -66,7 +67,7 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
                 let identifier = subscriber.identifier().unwrap().clone();
                 Ok(
                     IotaPublisher {
-                        cfg,
+                        cfg: cfg.clone(),
                         subscriber,
                         identifier,
                     }
@@ -139,7 +140,7 @@ impl<'a> Publisher<'a> for IotaPublisher<'a> {
 
         let packet = self.subscriber.message()
             .with_payload(bytes)
-            .with_topic(self.cfg.topic)
+            .with_topic(self.cfg.topic.as_str())
             .signed()
             .send()
             .await
@@ -235,15 +236,13 @@ mod iota_test {
 
     #[tokio::test]
     async fn new_iota_streams_provider() {
-        let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
-        let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
+        let sdk_info: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
         let _annotator = mock_provider(sdk_info).await;
     }
 
     #[tokio::test]
     async fn streams_provider_publish() {
-        let sdk_config_bytes = std::fs::read("resources/test_config.json").unwrap();
-        let sdk_info: SdkInfo = serde_json::from_slice(sdk_config_bytes.as_slice()).unwrap();
+        let sdk_info: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
         let mut publisher = mock_provider(sdk_info.clone()).await;
 
         let raw_data_msg = "A packet to send to subscribers".to_string();
@@ -268,7 +267,7 @@ mod iota_test {
         publisher.publish(data).await.unwrap()
     }
 
-    async fn mock_provider(sdk_info: SdkInfo<'_>) -> IotaPublisher {
+    async fn mock_provider(sdk_info: SdkInfo) -> IotaPublisher {
         if let StreamConfig::IotaStreams(config) = &sdk_info.stream.config {
             let client: Client = Client::new(&config.tangle_node.uri());
             let mut seed = [0u8; 64];
@@ -281,7 +280,7 @@ mod iota_test {
                 .build();
             let announcement = streams_author.create_stream(BASE_TOPIC).await.unwrap();
 
-            let mut annotator = IotaPublisher::new(sdk_info.stream.clone()).await.unwrap();
+            let mut annotator = IotaPublisher::new(&sdk_info.stream).await.unwrap();
             // To test connect, there needs to be a running provider (oracle) so we'll manually test
             // this part
             //annotator.connect().await.unwrap();
@@ -294,9 +293,9 @@ mod iota_test {
             // Streams author accepts the subscription and dedicates a new branch specifically for
             // the annotator
             streams_author.receive_message(sub_message.address()).await.unwrap();
-            streams_author.new_branch(BASE_TOPIC, config.topic).await.unwrap();
+            streams_author.new_branch(BASE_TOPIC, config.topic.as_str()).await.unwrap();
             streams_author.send_keyload(
-                config.topic,
+                config.topic.as_str(),
                 vec![Permissioned::ReadWrite(annotator.identifier().clone(), PermissionDuration::Perpetual)],
                 vec![]
             )

@@ -3,10 +3,10 @@ use crate::config::{HashInfo, SignatureInfo, StreamInfo};
 use crate::annotations::constants::AnnotationType;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct SdkInfo<'a> {
+pub struct SdkInfo {
     #[serde(borrow)]
-    pub annotators: Vec<AnnotationType<'a>>,
-    pub hash: HashInfo<'a>,
-    pub signature: SignatureInfo<'a>,
-    pub stream: StreamInfo<'a>,
+    pub annotators: Vec<AnnotationType<'static>>,
+    pub hash: HashInfo,
+    pub signature: SignatureInfo,
+    pub stream: StreamInfo,
 }

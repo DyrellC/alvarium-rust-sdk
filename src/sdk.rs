@@ -1,16 +1,16 @@
-use crate::config::SdkInfo;
+use crate::config::{SdkInfo, StreamInfo};
 use crate::annotations::{Annotator, AnnotationList, constants::ACTION_CREATE};
 use crate::providers::stream_provider::{MessageWrapper, Publisher};
 
-pub struct SDK<'a, Pub: Publisher<'a>> {
+pub struct SDK<'a, Pub: Publisher> {
     annotators: &'a mut [Box<dyn Annotator>],
-    pub cfg: SdkInfo<'a>,
+    pub cfg: SdkInfo,
     stream: Pub
 }
 
-impl<'a, Pub: Publisher<'a>> SDK<'a, Pub> {
-    pub async fn new(cfg: SdkInfo<'a>, annotators: &'a mut [Box<dyn Annotator>]) -> Result<SDK<'a, Pub>, String> {
-        let mut publisher = Pub::new(cfg.stream.clone()).await?;
+impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
+    pub async fn new(cfg: SdkInfo, annotators: &'a mut [Box<dyn Annotator>]) -> Result<SDK<'a, Pub>, String> {
+        let mut publisher = Pub::new(&cfg.stream).await?;
         publisher.connect().await?;
         Ok(SDK {
             annotators,
@@ -85,7 +85,7 @@ mod sdk_tests {
     }
 
     // Mocks Pub::new() with IotaPublisher Annotator
-    async fn mock_annotator(sdk_info: SdkInfo<'_>) -> IotaPublisher {
+    async fn mock_annotator(sdk_info: SdkInfo) -> IotaPublisher {
         if let StreamConfig::IotaStreams(config) = &sdk_info.stream.config {
             let client: Client = Client::new(&config.tangle_node.uri());
             let mut seed = [0u8; 64];
@@ -98,7 +98,7 @@ mod sdk_tests {
                 .build();
             let announcement = streams_author.create_stream(BASE_TOPIC).await.unwrap();
 
-            let mut publisher = IotaPublisher::new(sdk_info.stream.clone()).await.unwrap();
+            let mut publisher = IotaPublisher::new(&sdk_info.stream).await.unwrap();
             // To test connect, there needs to be a running provider (oracle) so we'll manually test
             // this part
             //annotator.connect().await.unwrap();
@@ -111,9 +111,9 @@ mod sdk_tests {
             // Streams author accepts the subscription and dedicates a new branch specifically for
             // the annotator
             streams_author.receive_message(sub_message.address()).await.unwrap();
-            streams_author.new_branch(BASE_TOPIC, config.topic).await.unwrap();
+            streams_author.new_branch(BASE_TOPIC, config.topic.as_str()).await.unwrap();
             streams_author.send_keyload(
-                config.topic,
+                config.topic.as_str(),
                 vec![Permissioned::ReadWrite(publisher.identifier().clone(), PermissionDuration::Perpetual)],
                 vec![]
             )

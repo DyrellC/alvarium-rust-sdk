@@ -17,4 +17,10 @@ lazy_static! {
             Err(_) => std::fs::read("resources/test_config.json").unwrap()
         }
     };
+    pub static ref MQTT_TEST_CONFIG_BYTES: Vec<u8> = {
+        std::fs::read("resources/mqtt_stream_config.json").unwrap()
+    };
+    pub static ref IOTA_TEST_CONFIG_BYTES: Vec<u8> = {
+        std::fs::read("resources/iota_streams_config.json").unwrap()
+    };
 }

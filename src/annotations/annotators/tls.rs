@@ -1,7 +1,5 @@
-use std::fs::File;
-use std::io::{BufReader, Read, Write};
-use std::sync::Arc;
-use rustls::{Connection, ServerConfig, Stream};
+#[cfg(feature = "rustls")]
+use std::io::Read;
 use crate::annotations::{
     Annotation,
     Annotator,
@@ -12,16 +10,17 @@ use crate::annotations::{derive_hash, sign_annotation};
 
 
 #[cfg(feature = "native-tls")]
-use native_tls::{TlsConnector, TlsAcceptor, TlsStream};
+use native_tls::TlsStream;
 #[cfg(feature = "rustls")]
-use rustls::{ClientConnection, ServerConnection, ClientConfig, RootCertStore};
+use rustls::Connection;
 use std::net::TcpStream;
+#[cfg(feature = "native-tls")]
 use std::sync::Mutex;
 
 pub struct TlsAnnotator<'a> {
     hash: constants::HashType<'a>,
     kind: constants::AnnotationType<'a>,
-    sign: config::SignatureInfo<'a>,
+    sign: config::SignatureInfo,
 
     // TODO: Make type for this
     #[cfg(feature = "native-tls")]
@@ -34,7 +33,7 @@ pub struct TlsAnnotator<'a> {
 }
 
 impl<'a> TlsAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo<'a>) -> impl Annotator + Tls<'a> + 'a {
+    pub fn new(cfg: &config::SdkInfo) -> impl Annotator + Tls<'a> + 'a {
         TlsAnnotator {
             hash: cfg.hash.hash_type,
             kind: constants::ANNOTATION_TLS,
@@ -64,7 +63,7 @@ pub trait Tls<'a> {
 impl<'a> Tls<'a> for TlsAnnotator<'a> {
     #[cfg(feature = "native-tls")]
     fn set_connection_native(&mut self, tls_stream: TlsStream<TcpStream>) {
-        self.client_conn_native = Some(Mutex::new(tls_stream));
+        self.conn_native = Some(Mutex::new(tls_stream));
     }
 
     #[cfg(feature = "rustls")]
@@ -76,7 +75,7 @@ impl<'a> Tls<'a> for TlsAnnotator<'a> {
     #[cfg(feature = "native-tls")]
     fn check_tls_stream_native(&self) -> bool {
         match &self.conn_native {
-            Some(conn) => conn.lock().unwrap().get_ref().peer_certificate().is_ok(),
+            Some(conn) => conn.lock().unwrap().peer_certificate().is_ok(),
             None => false
         }
     }
@@ -147,7 +146,7 @@ impl<'a> Annotator for TlsAnnotator<'a> {
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 #[cfg(all(not(feature = "rustls"), feature = "native-tls"))]
-                let is_satisfied = self.check_handshake_native();
+                let is_satisfied = self.check_tls_stream_native();
                 #[cfg(feature = "rustls")]
                 let is_satisfied = self.check_tls_stream_rustls();
 
@@ -165,7 +164,7 @@ impl<'a> Annotator for TlsAnnotator<'a> {
 #[cfg(test)]
 mod tls_tests {
     use std::sync::Arc;
-    use rustls::{ClientConnection, Connection, Stream, StreamOwned};
+    use rustls::ClientConnection;
     use std::net::TcpStream;
     use crate::{config, providers::sign_provider::get_priv_key};
     use crate::annotations::{Annotator, constants, TlsAnnotator};
@@ -175,8 +174,7 @@ mod tls_tests {
 
     #[test]
     fn valid_and_invalid_tls_annotator() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
         config2.hash.hash_type = constants::HashType("Not a known hash type");
@@ -199,11 +197,10 @@ mod tls_tests {
     #[cfg(feature = "rustls")]
     #[test]
     fn make_tls_annotation() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let data = String::from("Some random data");
-        let priv_key_file = std::fs::read(config.signature.private_key_info.path).unwrap();
+        let priv_key_file = std::fs::read(&config.signature.private_key_info.path).unwrap();
         let priv_key_string = String::from_utf8(priv_key_file).unwrap();
         let priv_key = get_priv_key(&priv_key_string).unwrap();
         let sig = priv_key.sign(data.as_bytes());
@@ -228,8 +225,7 @@ mod tls_tests {
 
     #[test]
     fn unsatisfied_tls_annotation() {
-        let config_file = std::fs::read("resources/test_config.json").unwrap();
-        let config: config::SdkInfo = serde_json::from_slice(config_file.as_slice()).unwrap();
+        let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let data = String::from("Some random data");
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);

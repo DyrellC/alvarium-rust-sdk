@@ -1,18 +1,16 @@
-use crate::annotations::constants::KeyAlgorithm;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct SignatureInfo<'a> {
-    #[serde(borrow)]
+pub struct SignatureInfo {
     #[serde(rename="public")]
-    pub(crate) public_key_info: KeyInfo<'a>,
+    pub(crate) public_key_info: KeyInfo,
     #[serde(rename="private")]
-    pub(crate) private_key_info: KeyInfo<'a>,
+    pub(crate) private_key_info: KeyInfo,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct KeyInfo<'a> {
+pub struct KeyInfo {
     #[serde(rename="type")]
-    pub(crate) key_type: KeyAlgorithm<'a>,
-    pub(crate) path: &'a str
+    pub(crate) key_type: String,
+    pub(crate) path: String
 }
