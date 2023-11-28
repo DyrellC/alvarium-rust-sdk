@@ -1,3 +1,4 @@
+use alvarium_annotator::constants::KeyAlgorithm;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -13,4 +14,10 @@ pub struct KeyInfo {
     #[serde(rename="type")]
     pub(crate) key_type: String,
     pub(crate) path: String
+}
+
+impl KeyInfo {
+    pub fn key_algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm(&self.key_type)
+    }
 }

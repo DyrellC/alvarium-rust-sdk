@@ -4,31 +4,34 @@ use crate::annotations::{
     constants,
 };
 use crate::config;
-use crate::annotations::{derive_hash, sign_annotation};
+use alvarium_annotator::{derive_hash, serialise_and_sign};
+use crate::factories::{new_hash_provider, new_signature_provider};
+use crate::providers::sign_provider::SignatureProviderWrap;
 
 pub struct SourceAnnotator<'a> {
     hash: constants::HashType<'a>,
     kind: constants::AnnotationType<'a>,
-    sign: config::SignatureInfo,
+    sign: SignatureProviderWrap,
 }
 
 impl<'a> SourceAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> impl Annotator + 'a {
-        SourceAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+        Ok(SourceAnnotator {
             hash: cfg.hash.hash_type,
             kind: constants::ANNOTATION_SOURCE,
-            sign: cfg.signature.clone(),
-        }
+            sign: new_signature_provider(&cfg.signature)?,
+        })
     }
 }
 
 impl<'a> Annotator for SourceAnnotator<'a> {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
-        let key = derive_hash(self.hash, data);
+        let hasher = new_hash_provider(&self.hash)?;
+        let key = derive_hash(hasher, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 let mut annotation = Annotation::new(&key, self.hash, host, self.kind, true);
-                let signature = sign_annotation(&self.sign, &annotation)?;
+                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
@@ -57,13 +60,13 @@ mod source_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut source_annotator_1 = SourceAnnotator::new(&config);
-        let mut source_annotator_2 = SourceAnnotator::new(&config2);
+        let mut source_annotator_1 = SourceAnnotator::new(&config).unwrap();
+        let mut source_annotator_2 = SourceAnnotator::new(&config2).unwrap();
         let valid_annotation = source_annotator_1.annotate(&serialised).unwrap();
-        let invalid_annotation = source_annotator_2.annotate(&serialised).unwrap();
+        let invalid_annotation = source_annotator_2.annotate(&serialised);
 
         assert!(valid_annotation.validate());
-        assert!(!invalid_annotation.validate());
+        assert!(invalid_annotation.is_err());
     }
 
 
@@ -80,7 +83,7 @@ mod source_tests {
         let signable = Signable::new(data, hex::encode(sig.to_bytes()));
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut source_annotator = SourceAnnotator::new(&config);
+        let mut source_annotator = SourceAnnotator::new(&config).unwrap();
         let annotation = source_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

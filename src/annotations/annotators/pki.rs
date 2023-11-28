@@ -4,35 +4,38 @@ use crate::annotations::{
     constants,
 };
 use crate::{config::{self, Signable}};
-use crate::annotations::{derive_hash, sign_annotation};
+use crate::providers::sign_provider::SignatureProviderWrap;
+use alvarium_annotator::{derive_hash, serialise_and_sign};
+use crate::factories::{new_hash_provider, new_signature_provider};
 
 pub struct PkiAnnotator<'a> {
     hash: constants::HashType<'a>,
     kind: constants::AnnotationType<'a>,
-    sign: config::SignatureInfo,
+    sign: SignatureProviderWrap,
 }
 
 impl<'a> PkiAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> impl Annotator + 'a {
-        PkiAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+        Ok(PkiAnnotator {
             hash: cfg.hash.hash_type,
             kind: constants::ANNOTATION_PKI,
-            sign: cfg.signature.clone(),
-        }
+            sign: new_signature_provider(&cfg.signature)?,
+        })
     }
 }
 
 impl<'a> Annotator for PkiAnnotator<'a> {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
-        let key = derive_hash(self.hash, data);
+        let hasher = new_hash_provider(&self.hash)?;
+        let key = derive_hash(hasher, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
                 match signable {
                     Ok(signable) => {
-                        let verified = signable.verify_signature(&self.sign.public_key_info)?;
+                        let verified = signable.verify_signature(&self.sign)?;
                         let mut annotation = Annotation::new(&key, self.hash, host, self.kind, verified);
-                        let signature = sign_annotation(&self.sign, &annotation)?;
+                        let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                         annotation.with_signature(&signature);
                         Ok(annotation)
                     }
@@ -65,13 +68,14 @@ mod pki_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut pki_annotator_1 = PkiAnnotator::new(&config);
-        let mut pki_annotator_2 = PkiAnnotator::new(&config2);
+        let mut pki_annotator_1 = PkiAnnotator::new(&config).unwrap();
+        let mut pki_annotator_2 = PkiAnnotator::new(&config2).unwrap();
+
         let valid_annotation = pki_annotator_1.annotate(&serialised).unwrap();
-        let invalid_annotation = pki_annotator_2.annotate(&serialised).unwrap();
+        let invalid_annotation = pki_annotator_2.annotate(&serialised);
 
         assert!(valid_annotation.validate());
-        assert!(!invalid_annotation.validate());
+        assert!(invalid_annotation.is_err());
     }
 
 
@@ -79,6 +83,7 @@ mod pki_tests {
     fn make_pki_annotation() {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
+        println!("config {}", config.signature.private_key_info.path);
         let data = String::from("Some random data");
         let priv_key_file = std::fs::read(&config.signature.private_key_info.path).unwrap();
         let priv_key_string = String::from_utf8(priv_key_file).unwrap();
@@ -88,7 +93,7 @@ mod pki_tests {
         let signable = Signable::new(data, hex::encode(sig.to_bytes()));
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut pki_annotator = PkiAnnotator::new(&config);
+        let mut pki_annotator = PkiAnnotator::new(&config).unwrap();
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());
@@ -108,7 +113,7 @@ mod pki_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut pki_annotator = PkiAnnotator::new(&config);
+        let mut pki_annotator = PkiAnnotator::new(&config).unwrap();
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

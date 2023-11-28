@@ -1,6 +1,6 @@
 use crate::config::{MqttStreamConfig, StreamConfig, StreamInfo};
 use rumqttc::{AsyncClient, ConnectionError, EventLoop, MqttOptions, QoS};
-use crate::providers::stream_provider::{MessageWrapper, Publisher};
+use alvarium_annotator::{MessageWrapper, Publisher};
 
 pub struct MqttPublisher {
     cfg: MqttStreamConfig,
@@ -9,7 +9,7 @@ pub struct MqttPublisher {
 }
 
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl Publisher for MqttPublisher {
     type StreamConfig = StreamInfo;
     async fn new(cfg: &StreamInfo) -> Result<Self, String> {
@@ -97,10 +97,10 @@ fn qos(qos: u8) -> QoS {
 
 #[cfg(test)]
 mod mqtt_tests {
-    use alvarium_annotator::{Annotator, AnnotationList};
+    use alvarium_annotator::{Annotator, AnnotationList, MessageWrapper, Publisher};
     use crate::annotations::PkiAnnotator;
     use crate::config::{SdkInfo, Signable, StreamInfo};
-    use crate::providers::stream_provider::{MessageWrapper, MqttPublisher, Publisher};
+    use crate::providers::stream_provider::MqttPublisher;
 
     #[tokio::test]
     async fn new_mqtt_provider() {
@@ -123,7 +123,7 @@ mod mqtt_tests {
         let signable = Signable::new(raw_data_msg, sig);
 
         let mut list = AnnotationList { items: vec![] };
-        let mut pki_annotator = PkiAnnotator::new(&sdk_info);
+        let mut pki_annotator = PkiAnnotator::new(&sdk_info).unwrap();
         list.items.push(
             pki_annotator.annotate(
                 &serde_json::to_vec(&signable).unwrap()

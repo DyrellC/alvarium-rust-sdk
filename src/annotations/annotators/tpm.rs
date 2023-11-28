@@ -4,29 +4,31 @@ use crate::annotations::{
     constants,
 };
 use crate::config;
-use crate::annotations::{derive_hash, sign_annotation};
+use alvarium_annotator::{derive_hash, serialise_and_sign};
 
 
 #[cfg(unix)]
 use std::os::linux::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use crate::factories::{new_hash_provider, new_signature_provider};
+use crate::providers::sign_provider::SignatureProviderWrap;
 
 const UNIX_TPM_PATH: &str = "/dev/tpm0"; // Adjust the path as needed
 
 pub struct TpmAnnotator<'a> {
     hash: constants::HashType<'a>,
     kind: constants::AnnotationType<'a>,
-    sign: config::SignatureInfo,
+    sign: SignatureProviderWrap,
 }
 
 impl<'a> TpmAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> impl Annotator + 'a {
-        TpmAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+        Ok(TpmAnnotator {
             hash: cfg.hash.hash_type,
             kind: constants::ANNOTATION_TPM,
-            sign: cfg.signature.clone(),
-        }
+            sign: new_signature_provider(&cfg.signature)?,
+        })
     }
 
     #[cfg(windows)]
@@ -60,7 +62,8 @@ impl<'a> TpmAnnotator<'a> {
 
 impl<'a> Annotator for TpmAnnotator<'a> {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
-        let key = derive_hash(self.hash, data);
+        let hasher = new_hash_provider(&self.hash)?;
+        let key = derive_hash(hasher, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 #[cfg(unix)]
@@ -69,7 +72,7 @@ impl<'a> Annotator for TpmAnnotator<'a> {
                 let is_satisfied = self.check_tpm_presence_windows();
 
                 let mut annotation = Annotation::new(&key, self.hash, host, self.kind, is_satisfied);
-                let signature = sign_annotation(&self.sign, &annotation)?;
+                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
@@ -100,13 +103,14 @@ mod tpm_tests {
         let signable = Signable::new(data, sig);
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut tpm_annotator_1 = TpmAnnotator::new(&config);
-        let mut tpm_annotator_2 = TpmAnnotator::new(&config2);
+        let mut tpm_annotator_1 = TpmAnnotator::new(&config).unwrap();
+        let mut tpm_annotator_2 = TpmAnnotator::new(&config2).unwrap();
+
         let valid_annotation = tpm_annotator_1.annotate(&serialised).unwrap();
-        let invalid_annotation = tpm_annotator_2.annotate(&serialised).unwrap();
+        let invalid_annotation = tpm_annotator_2.annotate(&serialised);
 
         assert!(valid_annotation.validate());
-        assert!(!invalid_annotation.validate());
+        assert!(invalid_annotation.is_err());
     }
 
 
@@ -123,7 +127,7 @@ mod tpm_tests {
         let signable = Signable::new(data, hex::encode(sig.to_bytes()));
         let serialised = serde_json::to_vec(&signable).unwrap();
 
-        let mut tpm_annotator = TpmAnnotator::new(&config);
+        let mut tpm_annotator = TpmAnnotator::new(&config).unwrap();
         let annotation = tpm_annotator.annotate(&serialised).unwrap();
 
         assert!(annotation.validate());

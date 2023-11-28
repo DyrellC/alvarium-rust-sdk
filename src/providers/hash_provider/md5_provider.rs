@@ -1,5 +1,5 @@
+use alvarium_annotator::HashProvider;
 use md5_rs::Context;
-use crate::providers::hash_provider::HashProvider;
 
 pub struct MD5Provider {}
 
@@ -10,7 +10,7 @@ impl MD5Provider {
 }
 
 impl HashProvider for MD5Provider {
-    fn derive(data: &[u8]) -> String {
+    fn derive(&self, data: &[u8]) -> String {
         let mut ctx = Context::new();
         ctx.read(data);
         hex::encode(&ctx.finish())
@@ -49,9 +49,10 @@ fn md5_provider_test() {
         },
     ];
 
+    let hash_provider = MD5Provider::new();
     for case in cases {
         println!("Testing Case: {}", case.name);
-        let hash = MD5Provider::derive(case.data);
+        let hash = hash_provider.derive(case.data);
         assert_eq!(case.expected, hash)
     }
 }

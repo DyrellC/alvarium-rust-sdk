@@ -1,4 +1,4 @@
-use crate::providers::hash_provider::HashProvider;
+use alvarium_annotator::HashProvider;
 
 pub struct NoneProvider {}
 
@@ -9,7 +9,7 @@ impl NoneProvider {
 }
 
 impl HashProvider for NoneProvider {
-    fn derive(data: &[u8]) -> String {
+    fn derive(&self, data: &[u8]) -> String {
         unsafe {
             String::from_utf8_unchecked(data.to_vec())
         }
@@ -45,7 +45,8 @@ fn md5_provider_test() {
 
     for case in cases {
         println!("Testing Case: {}", case.name);
-        let hash = NoneProvider::derive(case.data);
+        let hash_provider = NoneProvider::new();
+        let hash = hash_provider.derive(case.data);
         assert_eq!(case.expected, hash)
     }
 }

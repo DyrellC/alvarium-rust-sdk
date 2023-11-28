@@ -1,19 +1,15 @@
 mod iota_streams;
 mod mqtt;
 
-use alvarium_annotator::constants::KeyAlgorithm;
+use alvarium_annotator::{SignProvider, StreamConfigWrapper};
 pub use iota_streams::*;
 pub use mqtt::*;
 
 use serde::{Serialize, Deserialize};
-use crate::config;
-use crate::providers::sign_provider::{Ed25519Provider, SignProvider};
 
-use crate::annotations::constants::{ED25519_KEY, StreamType};
+use crate::annotations::constants::StreamType;
+use crate::providers::sign_provider::SignatureProviderWrap;
 
-pub trait StreamConfigWrapper {
-    fn stream_type(&self) -> StreamType;
-}
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct StreamInfo {
@@ -60,20 +56,17 @@ impl Signable {
         Signable { seed, signature }
     }
 
-    pub(crate) fn verify_signature(&self, key: &config::KeyInfo) -> Result<bool, String> {
+    pub(crate) fn verify_signature(&self, provider: &SignatureProviderWrap) -> Result<bool, String> {
         if self.signature.is_empty() {
             return Err(format!("signature field is empty"))
         }
 
-        match KeyAlgorithm(&key.key_type) {
-            ED25519_KEY => {
-                match std::fs::read_to_string(key.path.clone()) {
-                    Ok(pub_key) =>
-                        Ed25519Provider::verify(&pub_key, self.seed.as_bytes(), self.signature.as_str()),
-                    Err(_) => Err(format!("pub key could not be read from provided path"))
-                }
+        match provider {
+            SignatureProviderWrap::Ed25519(provider)=> {
+                let sig_bytes = hex::decode(&self.signature).map_err(|e| e.to_string())?;
+                provider.verify(self.seed.as_bytes(), &sig_bytes)
+                    .map_err(|e| e.to_string())
             }
-            _ => Err(format!("unrecognized key type"))
         }
     }
 
@@ -88,25 +81,25 @@ impl Signable {
 #[cfg(test)]
 mod config_tests {
     use crypto::signatures::ed25519::SecretKey;
-    use super::{config, Signable};
+    use crate::providers::sign_provider::{Ed25519Provider, SignatureProviderWrap};
+    use crate::config;
+    use super::Signable;
+    use alvarium_annotator::SignProvider;
 
-    #[test]
-    fn verify_signable() {
+    #[tokio::test]
+    async fn verify_signable() {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
-
-        let priv_key_file = std::fs::read(&config.signature.private_key_info.path).unwrap();
-        let priv_key_bytes = hex::decode(String::from_utf8(priv_key_file).unwrap()).unwrap();
-        let priv_key = SecretKey::from_bytes(<[u8; 32]>::try_from(priv_key_bytes.as_slice()).unwrap());
+        let sig_provider = SignatureProviderWrap::Ed25519(Ed25519Provider::new(&config.signature).unwrap());
 
         let data = "A data packet to sign".to_string();
-        let sig = priv_key.sign(data.as_bytes());
+        let sig = sig_provider.sign(data.as_bytes()).unwrap();
 
         let signable = Signable {
             seed: data,
-            signature: hex::encode(sig.to_bytes())
+            signature: sig
         };
 
-        assert!(signable.verify_signature(&config.signature.public_key_info).unwrap())
+        assert!(signable.verify_signature(&sig_provider).unwrap())
     }
 
     #[test]
@@ -115,13 +108,15 @@ mod config_tests {
         let bad_priv_key = SecretKey::generate().unwrap();
 
         let data = "A data packet to sign".to_string();
-        let sig = bad_priv_key.sign(data.as_bytes());
+        let raw_sig = bad_priv_key.sign(data.as_bytes());
 
         let signable = Signable {
             seed: data,
-            signature: hex::encode(sig.to_bytes())
+            signature: hex::encode(raw_sig.to_bytes())
         };
 
-        assert!(!signable.verify_signature(&config.signature.public_key_info).unwrap())
+        let sig_provider = SignatureProviderWrap::Ed25519(Ed25519Provider::new(&config.signature).unwrap());
+
+        assert!(!signable.verify_signature(&sig_provider).unwrap())
     }
 }

@@ -1,6 +1,6 @@
 use crate::config::{SdkInfo, StreamInfo};
 use crate::annotations::{Annotator, AnnotationList, constants::ACTION_CREATE};
-use crate::providers::stream_provider::{MessageWrapper, Publisher};
+use alvarium_annotator::{MessageWrapper, Publisher};
 
 pub struct SDK<'a, Pub: Publisher> {
     annotators: &'a mut [Box<dyn Annotator>],
@@ -51,8 +51,8 @@ mod sdk_tests {
         transport::utangle::Client,
         User,
     };
-    use crate::{annotations::PkiAnnotator, config::{SdkInfo, StreamConfig, Signable}, CONFIG_BYTES, providers::stream_provider::{IotaPublisher, Publisher}};
-    use crate::annotations::SourceAnnotator;
+    use alvarium_annotator::Publisher;
+    use crate::{config::{SdkInfo, StreamConfig, Signable}, CONFIG_BYTES, providers::stream_provider::IotaPublisher};
     use crate::factories::new_annotator;
     use super::SDK;
 
@@ -67,8 +67,8 @@ mod sdk_tests {
 
         let mut annotators = Vec::new();
         for ann in &sdk_info.annotators {
-            let annotator = new_annotator(ann.clone(), sdk_info.clone());
-            annotators.push(new_annotator(ann.clone(), sdk_info.clone()).unwrap())
+            let annotator = new_annotator(ann.clone(), sdk_info.clone()).unwrap();
+            annotators.push(annotator)
         }
 
         // Mocks SDK::new() without Pub::connect()

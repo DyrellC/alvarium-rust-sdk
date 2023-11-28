@@ -1,16 +1,8 @@
-use crate::providers::{
-    stream_provider::Publisher,
-
-};
+use alvarium_annotator::Publisher;
 
 use crate::config::{StreamConfig, StreamInfo};
-use crate::providers::stream_provider::{IotaPublisher, MqttPublisher};
+use crate::providers::stream_provider::{IotaPublisher, MqttPublisher, PublisherWrap};
 
-
-pub enum PublisherWrap {
-    Iota(IotaPublisher),
-    Mqtt(MqttPublisher),
-}
 
 pub async fn new_stream_provider(cfg: StreamInfo) -> Result<PublisherWrap, String> {
     match cfg.config {

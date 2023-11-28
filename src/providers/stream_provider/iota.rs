@@ -1,5 +1,5 @@
 use crate::config::{IotaStreamsConfig, StreamConfig, StreamInfo};
-use crate::providers::stream_provider::{MessageWrapper, Publisher};
+use alvarium_annotator::{MessageWrapper, Publisher};
 use streams::{Address, User, transport::utangle::Client, id::{Ed25519, Identifier}, Message};
 use core::str::FromStr;
 use std::thread::sleep;
@@ -48,7 +48,7 @@ impl IotaPublisher {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl Publisher for IotaPublisher {
     type StreamConfig = StreamInfo;
     async fn new(cfg: &StreamInfo) -> Result<IotaPublisher, String> {
@@ -151,45 +151,6 @@ impl Publisher for IotaPublisher {
     }
 }
 
-// TODO: Migrate logic into oracle
-/*
-const DEMIA_SUB_URL: &'static str = "https://k1azl2450m.execute-api.us-east-1.amazonaws.com/test";
-#[derive(Debug, Serialize, Deserialize)]
-struct ResponseData {
-    did: String,
-    signing_fragment: String,
-    exchange_fragment: String
-}
-async fn get_demia_subscriber() -> Result<Identifier, String> {
-    let client = reqwest::Client::new();
-
-    let response: Value = client.get(DEMIA_SUB_URL.to_owned() + "/subscribers")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let body = response.get("body")
-        .ok_or("No body in response".to_string())?;
-    println!("Response: {:#}", response.get("body").unwrap());
-
-    let response: ResponseData = serde_json::from_value(body.clone())
-        .map_err(|e| e.to_string())?;
-
-    println!("Response1: {:?}", response);
-    let url_info = DIDUrlInfo::new(
-        response.did.try_into().unwrap(),
-        "",
-        &response.exchange_fragment,
-        &response.signing_fragment
-    );
-
-    Ok(Identifier::DID(url_info))
-
-}*/
-
 async fn get_announcement_id(uri: &str) -> Result<String, String> {
     #[derive(Serialize, Deserialize)]
     struct AnnouncementResponse {
@@ -250,7 +211,7 @@ mod iota_test {
         let signable = Signable::new(raw_data_msg, sig);
 
         let mut list = AnnotationList { items: vec![] };
-        let mut pki_annotator = PkiAnnotator::new(&sdk_info);
+        let mut pki_annotator = PkiAnnotator::new(&sdk_info).unwrap();
         list.items.push(
             pki_annotator.annotate(
                 &serde_json::to_vec(&signable).unwrap()

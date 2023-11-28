@@ -1,5 +1,4 @@
-use crate::providers::hash_provider::HashProvider;
-
+use alvarium_annotator::HashProvider;
 use crypto::hashes::sha::{SHA256, SHA256_LEN};
 
 pub struct Sha256Provider {}
@@ -11,7 +10,7 @@ impl Sha256Provider {
 }
 
 impl HashProvider for Sha256Provider {
-    fn derive(data: &[u8]) -> String {
+    fn derive(&self, data: &[u8]) -> String {
         let mut digest = [0_u8; SHA256_LEN];
         SHA256(data, &mut digest);
         hex::encode(digest)
@@ -52,7 +51,8 @@ fn sha256_provider_test() {
 
     for case in cases {
         println!("Testing Case: {}", case.name);
-        let hash = Sha256Provider::derive(case.data);
+        let hash_provider = Sha256Provider::new();
+        let hash = hash_provider.derive(case.data);
         assert_eq!(case.expected, hash)
     }
 }
