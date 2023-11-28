@@ -1,6 +1,8 @@
 use crate::config::{SdkInfo, StreamInfo};
-use crate::annotations::{Annotator, AnnotationList, constants::ACTION_CREATE};
+use crate::annotations::{Annotator, AnnotationList};
 use alvarium_annotator::{MessageWrapper, Publisher};
+use alvarium_annotator::constants::{ACTION_CREATE, ACTION_MUTATE, ACTION_PUBLISH, ACTION_TRANSIT, ANNOTATION_SOURCE};
+use crate::factories::new_annotator;
 
 pub struct SDK<'a, Pub: Publisher> {
     annotators: &'a mut [Box<dyn Annotator>],
@@ -35,12 +37,58 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
         self.stream.publish(wrapper).await
     }
 
-    pub async fn mutate(&mut self, _data: &[u8]) -> Result<(), String> {
-        //let src = ANNOTATION_SOURCE;
-        // TODO: add new mutation and transit functions
-        Ok(())
+    pub async fn mutate(&mut self, old: &[u8], new: &[u8]) -> Result<(), String> {
+        let mut ann_list = AnnotationList::default();
+
+        let mut source = new_annotator(ANNOTATION_SOURCE, self.cfg.clone())?;
+        let annotation = source.annotate(old)?;
+        ann_list.items.push(annotation);
+
+        for annotator in self.annotators.as_mut() {
+            ann_list.items.push(annotator.annotate(new)?);
+        }
+
+        let ann_bytes = serde_json::to_vec(&ann_list)
+            .map_err(|e| e.to_string())?;
+        let wrapper = MessageWrapper {
+            action: ACTION_MUTATE,
+            message_type: std::any::type_name::<AnnotationList>(),
+            content: &base64::encode(ann_bytes)
+        };
+        self.stream.publish(wrapper).await
     }
 
+    pub async fn transit(&mut self, data: &[u8]) -> Result<(), String> {
+        let mut ann_list = AnnotationList::default();
+        for annotator in self.annotators.as_mut() {
+            ann_list.items.push(annotator.annotate(data)?);
+        }
+
+        let ann_bytes = serde_json::to_vec(&ann_list)
+            .map_err(|e| e.to_string())?;
+        let wrapper = MessageWrapper {
+            action: ACTION_TRANSIT,
+            message_type: std::any::type_name::<AnnotationList>(),
+            content: &base64::encode(ann_bytes)
+        };
+        self.stream.publish(wrapper).await
+    }
+
+    pub async fn publish(&mut self, data: &[u8]) -> Result<(), String> {
+        let mut ann_list = AnnotationList::default();
+        for annotator in self.annotators.as_mut() {
+            ann_list.items.push(annotator.annotate(data)?);
+        }
+
+        let ann_bytes = serde_json::to_vec(&ann_list)
+            .map_err(|e| e.to_string())?;
+        let wrapper = MessageWrapper {
+            action: ACTION_PUBLISH,
+            message_type: std::any::type_name::<AnnotationList>(),
+            content: &base64::encode(ann_bytes)
+        };
+        self.stream.publish(wrapper).await
+    }
 }
 
 
@@ -59,7 +107,7 @@ mod sdk_tests {
     const BASE_TOPIC: &'static str = "Base Topic";
 
     #[tokio::test]
-    async fn sdk_create() {
+    async fn sdk_create_transit_publish() {
         // Uses base CONFIG_BYTES pulled from local config file (or the resources/test_config.json
         // if no config file is present)
         let sdk_info: SdkInfo = serde_json::from_slice(CONFIG_BYTES.as_slice()).unwrap();
@@ -82,6 +130,35 @@ mod sdk_tests {
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
         let signable = Signable::new(data, sig);
         sdk.create(signable.to_bytes().as_slice()).await.unwrap();
+        sdk.transit(signable.to_bytes().as_slice()).await.unwrap();
+        sdk.publish(signable.to_bytes().as_slice()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn sdk_mutate() {
+        // Uses base CONFIG_BYTES pulled from local config file (or the resources/test_config.json
+        // if no config file is present)
+        let sdk_info: SdkInfo = serde_json::from_slice(CONFIG_BYTES.as_slice()).unwrap();
+        let publisher = mock_annotator(sdk_info.clone()).await;
+
+        let mut annotators = Vec::new();
+        for ann in &sdk_info.annotators {
+            let annotator = new_annotator(ann.clone(), sdk_info.clone()).unwrap();
+            annotators.push(annotator)
+        }
+
+        // Mocks SDK::new() without Pub::connect()
+        let mut sdk = SDK {
+            annotators: annotators.as_mut_slice(),
+            cfg: sdk_info.clone(),
+            stream: publisher,
+        };
+
+        let data = "A packet to send to subscribers".to_string();
+        let old_data = "Some old state of the data before mutation".to_string();
+        let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
+        let signable = Signable::new(data, sig);
+        sdk.mutate(old_data.as_bytes(), signable.to_bytes().as_slice()).await.unwrap();
     }
 
     // Mocks Pub::new() with IotaPublisher Annotator
