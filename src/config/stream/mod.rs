@@ -46,17 +46,17 @@ pub enum StreamConfig {
 
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct Signable {
+pub struct Signable {
     seed: String,
     signature: String
 }
 
 impl Signable {
-    pub(crate) fn new(seed: String, signature: String) -> Self {
+    pub fn new(seed: String, signature: String) -> Self {
         Signable { seed, signature }
     }
 
-    pub(crate) fn verify_signature(&self, provider: &SignatureProviderWrap) -> Result<bool, String> {
+    pub fn verify_signature(&self, provider: &SignatureProviderWrap) -> Result<bool, String> {
         if self.signature.is_empty() {
             return Err(format!("signature field is empty"))
         }
@@ -70,7 +70,7 @@ impl Signable {
         }
     }
 
-    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         // Strings should not fail to serde
         // TODO: Verify that this is the case
         serde_json::to_vec(&self).unwrap()
