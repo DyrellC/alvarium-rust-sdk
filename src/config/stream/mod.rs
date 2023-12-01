@@ -14,8 +14,8 @@ use crate::providers::sign_provider::SignatureProviderWrap;
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct StreamInfo {
     #[serde(rename="type")]
-    pub(crate) stream_type: String,
-    pub(crate) config: StreamConfig
+    pub stream_type: String,
+    pub config: StreamConfig
 }
 
 impl StreamConfigWrapper for StreamInfo {
@@ -26,9 +26,9 @@ impl StreamConfigWrapper for StreamInfo {
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct UrlInfo {
-    pub(crate) host: String,
-    pub(crate) port: usize,
-    pub(crate) protocol: String
+    pub host: String,
+    pub port: usize,
+    pub protocol: String
 }
 
 impl UrlInfo {
