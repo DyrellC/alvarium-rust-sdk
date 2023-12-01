@@ -105,7 +105,7 @@ impl Publisher for IotaPublisher {
 
         #[derive(Serialize, Deserialize)]
         struct SubscriptionRequest {
-            msgid: String,
+            address: String,
             identifier: String,
             #[serde(rename="idType")]
             id_type: u8,
@@ -118,7 +118,7 @@ impl Publisher for IotaPublisher {
         let id_type = 0;
 
         let body = SubscriptionRequest {
-            msgid: subscription.address().relative().to_string(),
+            address: subscription.address().to_string(),
             identifier: self.identifier.to_string(),
             id_type,
             topic: self.cfg.topic.to_string(),
