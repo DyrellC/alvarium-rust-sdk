@@ -47,8 +47,8 @@ pub enum StreamConfig {
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Signable {
-    seed: String,
-    signature: String
+    pub seed: String,
+    pub signature: String
 }
 
 impl Signable {
