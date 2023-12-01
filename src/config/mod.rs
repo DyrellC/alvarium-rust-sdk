@@ -2,13 +2,11 @@ mod hash;
 mod sdk;
 mod sign;
 mod stream;
-mod tls;
 
 pub use hash::*;
 pub use sdk::*;
 pub use sign::*;
 pub use stream::*;
-pub use tls::*;
 
 
 
