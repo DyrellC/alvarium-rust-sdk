@@ -12,21 +12,20 @@ pub use stream::*;
 
 #[cfg(test)]
 mod make_config_tests {
-    use alvarium_annotator::constants::{KeyAlgorithm, StreamType};
     use super::{SdkInfo, StreamInfo, IotaStreamsConfig, MqttStreamConfig};
     #[test]
     fn new_config() {
         let config: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
-        assert!(config.hash.hash_type.validate());
-        assert!(KeyAlgorithm(&config.signature.private_key_info.key_type).validate());
-        assert!(config.annotators[0].validate());
+        assert!(config.hash.hash_type.is_base_hash_type());
+        assert!(config.signature.private_key_info.key_type.is_base_key_algorithm());
+        assert!(config.annotators[0].is_base_annotation_type());
     }
 
     #[test]
     fn iota_streams_config() {
         let config: StreamInfo = serde_json::from_slice(crate::IOTA_TEST_CONFIG_BYTES.as_slice()).unwrap();
         let _is_config: IotaStreamsConfig;
-        assert!(StreamType(&config.stream_type).validate());
+        assert!(config.stream_type.is_base_stream_type());
         assert!(matches!(config.config, _is_config));
     }
 
@@ -34,7 +33,7 @@ mod make_config_tests {
     fn mqtt_stream_config() {
         let config: StreamInfo = serde_json::from_slice(crate::MQTT_TEST_CONFIG_BYTES.as_slice()).unwrap();
         let _mqtt_config: MqttStreamConfig;
-        assert!(StreamType(&config.stream_type).validate());
+        assert!(config.stream_type.is_base_stream_type());
         assert!(matches!(config.config, _mqtt_config));
     }
 }

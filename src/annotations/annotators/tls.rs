@@ -19,9 +19,9 @@ use std::sync::Mutex;
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
 
-pub struct TlsAnnotator<'a> {
-    hash: constants::HashType<'a>,
-    kind: constants::AnnotationType<'a>,
+pub struct TlsAnnotator{
+    hash: constants::HashType,
+    kind: constants::AnnotationType,
     sign: SignatureProviderWrap,
 
     // TODO: Make type for this
@@ -34,11 +34,11 @@ pub struct TlsAnnotator<'a> {
     stream: Option<TcpStream>,
 }
 
-impl<'a> TlsAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + Tls<'a> + 'a, String> {
+impl TlsAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + Tls, String> {
         Ok(TlsAnnotator {
-            hash: cfg.hash.hash_type,
-            kind: constants::ANNOTATION_TLS,
+            hash: cfg.hash.hash_type.clone(),
+            kind: constants::ANNOTATION_TLS.clone(),
             sign: new_signature_provider(&cfg.signature)?,
             #[cfg(feature = "native-tls")]
             conn_native: None,
@@ -50,7 +50,7 @@ impl<'a> TlsAnnotator<'a> {
     }
 }
 
-pub trait Tls<'a> {
+pub trait Tls {
     #[cfg(feature = "native-tls")]
     fn set_connection_native(&mut self, tls_stream: TlsStream<TcpStream>);
     #[cfg(feature = "rustls")]
@@ -62,7 +62,7 @@ pub trait Tls<'a> {
     fn check_tls_stream_rustls(&mut self) -> bool;
 }
 
-impl<'a> Tls<'a> for TlsAnnotator<'a> {
+impl Tls for TlsAnnotator {
     #[cfg(feature = "native-tls")]
     fn set_connection_native(&mut self, tls_stream: TlsStream<TcpStream>) {
         self.conn_native = Some(Mutex::new(tls_stream));
@@ -142,7 +142,7 @@ impl<'a> Tls<'a> for TlsAnnotator<'a> {
 
 
 // Create a TLS Server Connection instance to determine if it is being used
-impl<'a> Annotator for TlsAnnotator<'a> {
+impl Annotator for TlsAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
         let key = derive_hash(hasher, data);
@@ -153,7 +153,7 @@ impl<'a> Annotator for TlsAnnotator<'a> {
                 #[cfg(feature = "rustls")]
                 let is_satisfied = self.check_tls_stream_rustls();
 
-                let mut annotation = Annotation::new(&key, self.hash, host, self.kind, is_satisfied);
+                let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), is_satisfied);
                 let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
@@ -180,7 +180,7 @@ mod tls_tests {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
-        config2.hash.hash_type = constants::HashType("Not a known hash type");
+        config2.hash.hash_type = constants::HashType("Not a known hash type".to_string());
 
         let data = String::from("Some random data");
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
@@ -194,7 +194,7 @@ mod tls_tests {
         let valid_annotation = tls_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = tls_annotator_2.annotate(&serialised);
 
-        assert!(valid_annotation.validate());
+        assert!(valid_annotation.validate_base());
         assert!(invalid_annotation.is_err());
     }
 
@@ -220,8 +220,8 @@ mod tls_tests {
 
         let annotation = tls_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_TLS);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_TLS);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
         assert!(annotation.is_satisfied)
@@ -240,8 +240,8 @@ mod tls_tests {
         let mut tls_annotator = TlsAnnotator::new(&config).unwrap();
         let annotation = tls_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_TLS);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_TLS);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
         assert!(!annotation.is_satisfied)

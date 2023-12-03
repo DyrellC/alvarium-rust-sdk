@@ -14,13 +14,13 @@ use crate::providers::sign_provider::SignatureProviderWrap;
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct StreamInfo {
     #[serde(rename="type")]
-    pub stream_type: String,
+    pub stream_type: StreamType,
     pub config: StreamConfig
 }
 
 impl StreamConfigWrapper for StreamInfo {
-    fn stream_type(&self) -> StreamType {
-        StreamType(&self.stream_type)
+    fn stream_type(&self) -> &StreamType {
+        &self.stream_type
     }
 }
 

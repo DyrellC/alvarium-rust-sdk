@@ -8,23 +8,23 @@ use crate::providers::sign_provider::SignatureProviderWrap;
 use alvarium_annotator::{derive_hash, serialise_and_sign};
 use crate::factories::{new_hash_provider, new_signature_provider};
 
-pub struct PkiAnnotator<'a> {
-    hash: constants::HashType<'a>,
-    kind: constants::AnnotationType<'a>,
+pub struct PkiAnnotator {
+    hash: constants::HashType,
+    kind: constants::AnnotationType,
     sign: SignatureProviderWrap,
 }
 
-impl<'a> PkiAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+impl PkiAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
         Ok(PkiAnnotator {
-            hash: cfg.hash.hash_type,
-            kind: constants::ANNOTATION_PKI,
+            hash: cfg.hash.hash_type.clone(),
+            kind: constants::ANNOTATION_PKI.clone(),
             sign: new_signature_provider(&cfg.signature)?,
         })
     }
 }
 
-impl<'a> Annotator for PkiAnnotator<'a> {
+impl Annotator for PkiAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
         let key = derive_hash(hasher, data);
@@ -34,7 +34,7 @@ impl<'a> Annotator for PkiAnnotator<'a> {
                 match signable {
                     Ok(signable) => {
                         let verified = signable.verify_signature(&self.sign)?;
-                        let mut annotation = Annotation::new(&key, self.hash, host, self.kind, verified);
+                        let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), verified);
                         let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                         annotation.with_signature(&signature);
                         Ok(annotation)
@@ -60,7 +60,7 @@ mod pki_tests {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
-        config2.hash.hash_type = constants::HashType("Not a known hash type");
+        config2.hash.hash_type = constants::HashType("Not a known hash type".to_string());
 
         let data = String::from("Some random data");
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
@@ -74,7 +74,7 @@ mod pki_tests {
         let valid_annotation = pki_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = pki_annotator_2.annotate(&serialised);
 
-        assert!(valid_annotation.validate());
+        assert!(valid_annotation.validate_base());
         assert!(invalid_annotation.is_err());
     }
 
@@ -96,8 +96,8 @@ mod pki_tests {
         let mut pki_annotator = PkiAnnotator::new(&config).unwrap();
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_PKI);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_PKI);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
         assert!(annotation.is_satisfied)
@@ -116,8 +116,8 @@ mod pki_tests {
         let mut pki_annotator = PkiAnnotator::new(&config).unwrap();
         let annotation = pki_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_PKI);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_PKI);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
         assert!(!annotation.is_satisfied)

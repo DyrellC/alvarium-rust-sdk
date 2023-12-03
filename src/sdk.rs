@@ -30,7 +30,7 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
         let ann_bytes = serde_json::to_vec(&ann_list)
             .map_err(|e| e.to_string())?;
         let wrapper = MessageWrapper {
-            action: ACTION_CREATE,
+            action: ACTION_CREATE.clone(),
             message_type: std::any::type_name::<AnnotationList>(),
             content: &base64::encode(ann_bytes)
         };
@@ -40,7 +40,7 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
     pub async fn mutate(&mut self, old: &[u8], new: &[u8]) -> Result<(), String> {
         let mut ann_list = AnnotationList::default();
 
-        let mut source = new_annotator(ANNOTATION_SOURCE, self.cfg.clone())?;
+        let mut source = new_annotator(ANNOTATION_SOURCE.clone(), self.cfg.clone())?;
         let annotation = source.annotate(old)?;
         ann_list.items.push(annotation);
 
@@ -51,7 +51,7 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
         let ann_bytes = serde_json::to_vec(&ann_list)
             .map_err(|e| e.to_string())?;
         let wrapper = MessageWrapper {
-            action: ACTION_MUTATE,
+            action: ACTION_MUTATE.clone(),
             message_type: std::any::type_name::<AnnotationList>(),
             content: &base64::encode(ann_bytes)
         };
@@ -67,7 +67,7 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
         let ann_bytes = serde_json::to_vec(&ann_list)
             .map_err(|e| e.to_string())?;
         let wrapper = MessageWrapper {
-            action: ACTION_TRANSIT,
+            action: ACTION_TRANSIT.clone(),
             message_type: std::any::type_name::<AnnotationList>(),
             content: &base64::encode(ann_bytes)
         };
@@ -83,7 +83,7 @@ impl<'a, Pub: Publisher<StreamConfig = StreamInfo>> SDK<'a, Pub> {
         let ann_bytes = serde_json::to_vec(&ann_list)
             .map_err(|e| e.to_string())?;
         let wrapper = MessageWrapper {
-            action: ACTION_PUBLISH,
+            action: ACTION_PUBLISH.clone(),
             message_type: std::any::type_name::<AnnotationList>(),
             content: &base64::encode(ann_bytes)
         };

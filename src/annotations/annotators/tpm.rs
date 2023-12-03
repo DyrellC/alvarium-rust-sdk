@@ -16,17 +16,17 @@ use crate::providers::sign_provider::SignatureProviderWrap;
 
 const UNIX_TPM_PATH: &str = "/dev/tpm0"; // Adjust the path as needed
 
-pub struct TpmAnnotator<'a> {
-    hash: constants::HashType<'a>,
-    kind: constants::AnnotationType<'a>,
+pub struct TpmAnnotator {
+    hash: constants::HashType,
+    kind: constants::AnnotationType,
     sign: SignatureProviderWrap,
 }
 
-impl<'a> TpmAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+impl TpmAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
         Ok(TpmAnnotator {
-            hash: cfg.hash.hash_type,
-            kind: constants::ANNOTATION_TPM,
+            hash: cfg.hash.hash_type.clone(),
+            kind: constants::ANNOTATION_TPM.clone(),
             sign: new_signature_provider(&cfg.signature)?,
         })
     }
@@ -60,7 +60,7 @@ impl<'a> TpmAnnotator<'a> {
 
 }
 
-impl<'a> Annotator for TpmAnnotator<'a> {
+impl Annotator for TpmAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
         let key = derive_hash(hasher, data);
@@ -71,7 +71,7 @@ impl<'a> Annotator for TpmAnnotator<'a> {
                 #[cfg(windows)]
                 let is_satisfied = self.check_tpm_presence_windows();
 
-                let mut annotation = Annotation::new(&key, self.hash, host, self.kind, is_satisfied);
+                let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), is_satisfied);
                 let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
@@ -95,7 +95,7 @@ mod tpm_tests {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
-        config2.hash.hash_type = constants::HashType("Not a known hash type");
+        config2.hash.hash_type = constants::HashType("Not a known hash type".to_string());
 
         let data = String::from("Some random data");
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
@@ -109,7 +109,7 @@ mod tpm_tests {
         let valid_annotation = tpm_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = tpm_annotator_2.annotate(&serialised);
 
-        assert!(valid_annotation.validate());
+        assert!(valid_annotation.validate_base());
         assert!(invalid_annotation.is_err());
     }
 
@@ -130,8 +130,8 @@ mod tpm_tests {
         let mut tpm_annotator = TpmAnnotator::new(&config).unwrap();
         let annotation = tpm_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_TPM);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_TPM);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
 

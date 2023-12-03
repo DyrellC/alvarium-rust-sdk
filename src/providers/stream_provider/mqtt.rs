@@ -131,7 +131,7 @@ mod mqtt_tests {
         );
 
         let data = MessageWrapper {
-            action: crate::annotations::constants::ACTION_CREATE,
+            action: crate::annotations::constants::ACTION_CREATE.clone(),
             message_type: std::any::type_name::<AnnotationList>(),
             content: &base64::encode(&serde_json::to_vec(&list).unwrap()),
         };

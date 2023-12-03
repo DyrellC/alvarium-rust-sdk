@@ -4,8 +4,7 @@ use crate::annotations::constants::AnnotationType;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SdkInfo {
-    #[serde(borrow)]
-    pub annotators: Vec<AnnotationType<'static>>,
+    pub annotators: Vec<AnnotationType>,
     pub hash: HashInfo,
     pub signature: SignatureInfo,
     pub stream: StreamInfo,

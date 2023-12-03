@@ -1,14 +1,15 @@
+use alvarium_annotator::constants::Validate;
 use crate::annotations::constants::HashType;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashInfo {
-    #[serde(borrow, rename="type")]
-    pub hash_type: HashType<'static>
+    #[serde(rename="type")]
+    pub hash_type: HashType
 }
 
-impl HashInfo {
-    pub fn validate(&self) -> bool {
-        self.hash_type.validate()
+impl Validate for HashInfo {
+    fn validate(&self) -> bool {
+        self.hash_type.is_base_hash_type()
     }
 }

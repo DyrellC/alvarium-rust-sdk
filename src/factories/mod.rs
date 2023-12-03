@@ -37,7 +37,7 @@ mod factory_tests {
     async fn annotator_factory() {
         let sdk_info: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
         for ann in &sdk_info.annotators {
-            let _annotator = new_annotator(*ann, sdk_info.clone()).unwrap();
+            let _annotator = new_annotator(ann.clone(), sdk_info.clone()).unwrap();
         }
     }
 }

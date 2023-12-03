@@ -8,29 +8,29 @@ use alvarium_annotator::{derive_hash, serialise_and_sign};
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
 
-pub struct SourceAnnotator<'a> {
-    hash: constants::HashType<'a>,
-    kind: constants::AnnotationType<'a>,
+pub struct SourceAnnotator {
+    hash: constants::HashType,
+    kind: constants::AnnotationType,
     sign: SignatureProviderWrap,
 }
 
-impl<'a> SourceAnnotator<'a> {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + 'a, String> {
+impl SourceAnnotator {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
         Ok(SourceAnnotator {
-            hash: cfg.hash.hash_type,
-            kind: constants::ANNOTATION_SOURCE,
+            hash: cfg.hash.hash_type.clone(),
+            kind: constants::ANNOTATION_SOURCE.clone(),
             sign: new_signature_provider(&cfg.signature)?,
         })
     }
 }
 
-impl<'a> Annotator for SourceAnnotator<'a> {
+impl Annotator for SourceAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
         let key = derive_hash(hasher, data);
         match gethostname::gethostname().to_str() {
             Some(host) => {
-                let mut annotation = Annotation::new(&key, self.hash, host, self.kind, true);
+                let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), true);
                 let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
@@ -52,7 +52,7 @@ mod source_tests {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
         let mut config2 = config.clone();
-        config2.hash.hash_type = constants::HashType("Not a known hash type");
+        config2.hash.hash_type = constants::HashType("Not a known hash type".to_string());
 
         let data = String::from("Some random data");
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
@@ -65,7 +65,7 @@ mod source_tests {
         let valid_annotation = source_annotator_1.annotate(&serialised).unwrap();
         let invalid_annotation = source_annotator_2.annotate(&serialised);
 
-        assert!(valid_annotation.validate());
+        assert!(valid_annotation.validate_base());
         assert!(invalid_annotation.is_err());
     }
 
@@ -86,8 +86,8 @@ mod source_tests {
         let mut source_annotator = SourceAnnotator::new(&config).unwrap();
         let annotation = source_annotator.annotate(&serialised).unwrap();
 
-        assert!(annotation.validate());
-        assert_eq!(annotation.kind, constants::ANNOTATION_SOURCE);
+        assert!(annotation.validate_base());
+        assert_eq!(annotation.kind, *constants::ANNOTATION_SOURCE);
         assert_eq!(annotation.host, gethostname::gethostname().to_str().unwrap());
         assert_eq!(annotation.hash, config.hash.hash_type);
         assert!(annotation.is_satisfied)
