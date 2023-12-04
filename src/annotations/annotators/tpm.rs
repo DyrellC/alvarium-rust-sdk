@@ -11,6 +11,7 @@ use alvarium_annotator::{derive_hash, serialise_and_sign};
 use std::os::linux::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use crate::config::Signable;
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
 
@@ -63,7 +64,11 @@ impl TpmAnnotator {
 impl Annotator for TpmAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
-        let key = derive_hash(hasher, data);
+        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let key = match signable {
+            Ok(signable) => derive_hash(hasher, signable.seed.as_bytes()),
+            Err(_) => derive_hash(hasher, data),
+        };
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 #[cfg(unix)]
