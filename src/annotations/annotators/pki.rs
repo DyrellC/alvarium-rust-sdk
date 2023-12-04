@@ -31,17 +31,11 @@ impl Annotator for PkiAnnotator {
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
-                match signable {
-                    Ok(signable) => {
-                        let verified = signable.verify_signature(&self.sign)?;
-                        let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), verified);
-                        let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
-                        annotation.with_signature(&signature);
-                        Ok(annotation)
-                    }
-                    Err(_) => Err(format!("could not deserialize signature"))
-                }
-
+                let verified = signable.map(|s| s.verify_signature(&self.sign)?).is_ok();
+                let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), verified);
+                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
+                annotation.with_signature(&signature);
+                Ok(annotation)
             },
             None => Err(format!("could not retrieve host name"))
         }
