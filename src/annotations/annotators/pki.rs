@@ -27,11 +27,16 @@ impl PkiAnnotator {
 impl Annotator for PkiAnnotator {
     fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
         let hasher = new_hash_provider(&self.hash)?;
-        let key = derive_hash(hasher, data);
+        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let (verified, key) = match signable {
+            Ok(signable) => {
+                let key = derive_hash(hasher, signable.seed.as_bytes());
+                (signable.verify_signature(&self.sign)?, key)
+            },
+            Err(_) => (false, derive_hash(hasher, data)),
+        };
         match gethostname::gethostname().to_str() {
             Some(host) => {
-                let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
-                let verified = signable.map(|s| s.verify_signature(&self.sign)).is_ok();
                 let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), verified);
                 let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
                 annotation.with_signature(&signature);
