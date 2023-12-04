@@ -5,7 +5,6 @@ use crate::annotations::{
 };
 use crate::config;
 use alvarium_annotator::{derive_hash, serialise_and_sign};
-use crate::annotations::annotators::verify_and_derive;
 use crate::config::Signable;
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
