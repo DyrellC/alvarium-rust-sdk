@@ -8,6 +8,7 @@ use alvarium_annotator::{derive_hash, serialise_and_sign};
 use crate::config::Signable;
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
+use crate::errors::{Error, Result};
 
 pub struct SourceAnnotator {
     hash: constants::HashType,
@@ -16,7 +17,7 @@ pub struct SourceAnnotator {
 }
 
 impl SourceAnnotator {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator<Error = Error>> {
         Ok(SourceAnnotator {
             hash: cfg.hash.hash_type.clone(),
             kind: constants::ANNOTATION_SOURCE.clone(),
@@ -26,9 +27,10 @@ impl SourceAnnotator {
 }
 
 impl Annotator for SourceAnnotator {
-    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
+    type Error = crate::errors::Error;
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation> {
         let hasher = new_hash_provider(&self.hash)?;
-        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let signable: std::result::Result<Signable, serde_json::Error> = serde_json::from_slice(data);
         let key = match signable {
             Ok(signable) => derive_hash(hasher, signable.seed.as_bytes()),
             Err(_) => derive_hash(hasher, data),
@@ -36,11 +38,11 @@ impl Annotator for SourceAnnotator {
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), true);
-                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
+                let signature = serialise_and_sign(&self.sign, &annotation)?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
-            None => Err(format!("could not retrieve host name"))
+            None => Err(Error::NoHostName)
         }
     }
 }

@@ -6,6 +6,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use futures::TryStreamExt;
+use log::{debug, info};
+use crate::errors::Result;
 
 const MAX_RETRIES: u8 = 100;
 
@@ -18,15 +20,16 @@ pub struct IotaPublisher {
 
 
 impl IotaPublisher {
-    pub(crate) async fn await_keyload(&mut self) -> Result<(), String> {
+    pub(crate) async fn await_keyload(&mut self) -> Result<()> {
         let mut i = 0;
+        info!("Awaiting Keyload message from publisher");
         while i < MAX_RETRIES {
             let m = self.subscriber.messages();
             if let Ok(next_messages) = m.try_collect::<Vec<Message>>().await {
-                println!("Found messages? {}", !next_messages.is_empty());
-                //if let Some(message) = next {
                 for message in next_messages {
+                    debug!("Found message: {}", message.address);
                     if let Some(keyload) = message.as_keyload() {
+                        debug!("Found keyload");
                         if keyload.includes_subscriber(&self.identifier) {
                             return Ok(())
                         }
@@ -36,7 +39,7 @@ impl IotaPublisher {
             sleep(Duration::from_secs(5));
             i += 1;
         }
-        Err("Did not find keyload, subscription may not have been processed correctly".to_string())
+        Err(crate::errors::Error::StreamsKeyloadNotFound)
     }
 
     pub fn client(&mut self) -> &mut User<Client> {
@@ -51,13 +54,13 @@ impl IotaPublisher {
 #[async_trait::async_trait]
 impl Publisher for IotaPublisher {
     type StreamConfig = StreamInfo;
-    async fn new(cfg: &StreamInfo) -> Result<IotaPublisher, String> {
+    type Error = crate::errors::Error;
+    async fn new(cfg: &StreamInfo) -> Result<IotaPublisher> {
         match &cfg.config {
             StreamConfig::IotaStreams(cfg) => {
                 let client = Client::new(cfg.tangle_node.uri());
                 let mut seed = [0u8; 64];
-                crypto::utils::rand::fill(&mut seed)
-                    .map_err(|e| e.to_string())?;
+                crypto::utils::rand::fill(&mut seed).unwrap();
 
                 let subscriber = User::builder()
                     .with_transport(client)
@@ -73,44 +76,29 @@ impl Publisher for IotaPublisher {
                     }
                 )
             },
-            _ => Err("not an Iota Streams configuration".to_string())
+            _ => Err(crate::errors::Error::IncorrectConfig)
         }
     }
 
-    async fn close(&mut self) -> Result<(), String> {
+    async fn close(&mut self) -> Result<()> {
         // No need to disconnect from stream or drop anything
         Ok(())
     }
 
-    async fn reconnect(&mut self) -> Result<(), String> {
+    async fn reconnect(&mut self) -> Result<()> {
         // No need to reconnect as disconnection does not occur
         Ok(())
     }
-    async fn connect(&mut self) -> Result<(), String> {
+    async fn connect(&mut self) -> Result<()> {
         let announcement = get_announcement_id(&self.cfg.provider.uri()).await?;
-        println!("Got announcement id");
-        let announcement_address = Address::from_str(&announcement)
-            .map_err(|e| e.to_string())?;
-        println!("announcement address: {}", announcement_address.to_string());
+        let announcement_address = Address::from_str(&announcement)?;
+        info!("Announcement address: {}", announcement_address.to_string());
 
-        println!("Fetching message");
-        self.subscriber.receive_message(announcement_address)
-            .await
-            .map_err(|e| e.to_string())?;
+        debug!("Fetching announcement message");
+        self.subscriber.receive_message(announcement_address).await?;
 
-        println!("Starting subscription");
-        let subscription = self.subscriber.subscribe()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        #[derive(Serialize, Deserialize)]
-        struct SubscriptionRequest {
-            address: String,
-            identifier: String,
-            #[serde(rename="idType")]
-            id_type: u8,
-            topic: String,
-        }
+        debug!("Sending Streams Subscription message");
+        let subscription = self.subscriber.subscribe().await?;
 
         #[cfg(feature = "did-streams")]
         let id_type = 1;
@@ -124,62 +112,64 @@ impl Publisher for IotaPublisher {
             topic: self.cfg.topic.to_string(),
         };
 
-        let body_bytes = serde_json::to_vec(&body)
-            .map_err(|e| e.to_string())?;
+        let body_bytes = serde_json::to_vec(&body)?;
 
-        println!("Sending subscription request to console");
+        info!("Sending subscription request to console");
         send_subscription_request(&self.cfg.provider.uri(), body_bytes).await?;
         self.await_keyload().await?;
         Ok(())
     }
 
-    async fn publish(&mut self, msg: MessageWrapper<'_>) -> Result<(), String> {
-        println!("Message being published: {:?}", msg);
-        let bytes = serde_json::to_vec(&msg)
-            .map_err(|e| e.to_string())?;
+    async fn publish(&mut self, msg: MessageWrapper<'_>) -> Result<()> {
+        debug!("Publishing message: {:?}", msg);
+        let bytes = serde_json::to_vec(&msg)?;
 
         let packet = self.subscriber.message()
             .with_payload(bytes)
             .with_topic(self.cfg.topic.as_str())
             .signed()
             .send()
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
-        println!("Published new message: {}", packet.address());
+        info!("Published new message: {}", packet.address());
         Ok(())
     }
 }
 
-async fn get_announcement_id(uri: &str) -> Result<String, String> {
+async fn get_announcement_id(uri: &str) -> Result<String> {
     #[derive(Serialize, Deserialize)]
     struct AnnouncementResponse {
         announcement_id: String
     }
 
+    info!("Fetching stream announcement id");
     let client = reqwest::Client::new();
     let response = client.get(uri.to_owned() + "/get_announcement_id")
         .send()
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
-    let announcement: AnnouncementResponse = serde_json::from_slice(&response)
-        .map_err(|e| e.to_string())?;
+    let announcement: AnnouncementResponse = serde_json::from_slice(&response)?;
     Ok(announcement.announcement_id)
 }
 
 
-async fn send_subscription_request(uri: &str, body: Vec<u8>) -> Result<(), String> {
+#[derive(Serialize, Deserialize)]
+struct SubscriptionRequest {
+    address: String,
+    identifier: String,
+    #[serde(rename="idType")]
+    id_type: u8,
+    topic: String,
+}
+async fn send_subscription_request(uri: &str, body: Vec<u8>) -> Result<()> {
     reqwest::Client::new()
         .post(uri.to_owned() + "/subscribe")
         .body(body)
         .header("Content-Type", "application/json")
         .send()
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(())
 }
 
@@ -187,6 +177,7 @@ async fn send_subscription_request(uri: &str, body: Vec<u8>) -> Result<(), Strin
 
 #[cfg(test)]
 mod iota_test {
+    use log::info;
     use crate::{
         annotations::{AnnotationList, Annotator, PkiAnnotator},
         config::{SdkInfo, StreamConfig, Signable}
@@ -224,7 +215,7 @@ mod iota_test {
             content: &base64::encode(&serde_json::to_vec(&list).unwrap()),
         };
 
-        println!("Publishing...");
+        info!("Publishing...");
         publisher.publish(data).await.unwrap()
     }
 

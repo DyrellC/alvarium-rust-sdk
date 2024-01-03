@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use crate::config::UrlInfo;
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IotaStreamsConfig {
     pub provider: UrlInfo,
     #[serde(rename="tangle")]

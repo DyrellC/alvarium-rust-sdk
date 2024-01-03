@@ -1,6 +1,8 @@
 use crate::config::{MqttStreamConfig, StreamConfig, StreamInfo};
 use rumqttc::{AsyncClient, ConnectionError, EventLoop, MqttOptions, QoS};
 use alvarium_annotator::{MessageWrapper, Publisher};
+use log::{debug, warn};
+use crate::errors::{Error, Result};
 
 pub struct MqttPublisher {
     cfg: MqttStreamConfig,
@@ -12,7 +14,8 @@ pub struct MqttPublisher {
 #[async_trait::async_trait]
 impl Publisher for MqttPublisher {
     type StreamConfig = StreamInfo;
-    async fn new(cfg: &StreamInfo) -> Result<Self, String> {
+    type Error = crate::errors::Error;
+    async fn new(cfg: &StreamInfo) -> Result<Self> {
         match &cfg.config {
             StreamConfig::MQTT(cfg)=> {
                 let (client, connection) = setup_client(&cfg);
@@ -22,33 +25,33 @@ impl Publisher for MqttPublisher {
                     connection
                 })
             }
-            _ => Err("not an mqtt stream configuration".to_string())
+            _ => Err(Error::IncorrectConfig)
         }
     }
 
-    async fn close(&mut self) -> Result<(), String> {
+    async fn close(&mut self) -> Result<()> {
         for topic in &self.cfg.topics {
-            self.client.unsubscribe(topic).await.map_err(|e| e.to_string())?;
+            self.client.unsubscribe(topic).await?;
         }
-        self.client.disconnect().await.map_err(|e| e.to_string())
+        Ok(self.client.disconnect().await?)
     }
 
-    async fn connect(&mut self) -> Result<(), String> {
+    async fn connect(&mut self) -> Result<()> {
         self.reconnect().await
     }
 
-    async fn reconnect(&mut self) -> Result<(), String> {
-        println!("Polling connection");
+    async fn reconnect(&mut self) -> Result<()> {
+        debug!("Polling connection");
         if let Ok(_) = self.connection.poll().await {
             return Ok(())
         }
 
-        println!("Making new client");
+        debug!("Making new client");
         let (client, mut connection) = setup_client(&self.cfg);
-        println!("Polling for error in reconnection");
+        debug!("Polling for error in reconnection");
         if let Err(ConnectionError::ConnectionRefused(e)) = connection.poll().await {
-            println!("Connection Error: {:?}", e);
-            return Err("connection is refused".to_string())
+            warn!("Connection Error: {:?}", e);
+            return Err(e.into())
         }
 
         self.client = client;
@@ -56,21 +59,20 @@ impl Publisher for MqttPublisher {
 
         let qos = qos(self.cfg.qos);
         for topic in &self.cfg.topics {
-            println!("Subscribing to topic: {}", topic);
-            self.client.subscribe(topic, qos).await.map_err(|e| e.to_string())?
+            debug!("Subscribing to topic: {}", topic);
+            self.client.subscribe(topic, qos).await?
         }
         Ok(())
     }
 
-    async fn publish(&mut self, msg: MessageWrapper<'_>) -> Result<(), String> {
-        println!("Reconnect");
+    async fn publish(&mut self, msg: MessageWrapper<'_>) -> Result<()> {
+        debug!("Reconnecting publisher");
         self.reconnect().await?;
-        let msg_str = serde_json::to_string(&msg).map_err(|e| e.to_string())?;
-        let bytes = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
+        let msg_str = serde_json::to_string(&msg)?;
+        let bytes = serde_json::to_vec(&msg)?;
         for topic in &self.cfg.topics {
-            println!("Posting {} to mqtt stream at topic {}", msg_str, topic);
-            self.client.publish(topic, qos(self.cfg.qos), true, bytes.clone())
-                .await.map_err(|e| e.to_string())?
+            debug!("Posting {} to mqtt stream at topic {}", msg_str, topic);
+            self.client.publish(topic, qos(self.cfg.qos), true, bytes.clone()).await?
         }
 
         Ok(())
@@ -98,6 +100,7 @@ fn qos(qos: u8) -> QoS {
 #[cfg(test)]
 mod mqtt_tests {
     use alvarium_annotator::{Annotator, AnnotationList, MessageWrapper, Publisher};
+    use log::info;
     use crate::annotations::PkiAnnotator;
     use crate::config::{SdkInfo, Signable, StreamInfo};
     use crate::providers::stream_provider::MqttPublisher;
@@ -136,7 +139,7 @@ mod mqtt_tests {
             content: &base64::encode(&serde_json::to_vec(&list).unwrap()),
         };
 
-        println!("Publishing...");
+        info!("Publishing...");
         publisher.publish(data).await.unwrap();
         publisher.close().await.unwrap();
     }

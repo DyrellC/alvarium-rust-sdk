@@ -5,6 +5,10 @@ pub mod sdk;
 pub mod providers;
 pub mod annotations;
 pub mod factories;
+pub mod logging;
+pub mod errors;
+
+pub type SdkAnnotator = dyn alvarium_annotator::Annotator<Error = crate::errors::Error>;
 
 #[macro_use]
 extern crate lazy_static;

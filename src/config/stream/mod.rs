@@ -9,9 +9,10 @@ use serde::{Serialize, Deserialize};
 
 use crate::annotations::constants::StreamType;
 use crate::providers::sign_provider::SignatureProviderWrap;
+use crate::errors::{Error, Result};
 
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StreamInfo {
     #[serde(rename="type")]
     pub stream_type: StreamType,
@@ -24,7 +25,7 @@ impl StreamConfigWrapper for StreamInfo {
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UrlInfo {
     pub host: String,
     pub port: usize,
@@ -37,7 +38,7 @@ impl UrlInfo {
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StreamConfig {
     IotaStreams(IotaStreamsConfig),
@@ -45,7 +46,7 @@ pub enum StreamConfig {
 }
 
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Signable {
     pub seed: String,
     pub signature: String
@@ -56,16 +57,15 @@ impl Signable {
         Signable { seed, signature }
     }
 
-    pub fn verify_signature(&self, provider: &SignatureProviderWrap) -> Result<bool, String> {
+    pub fn verify_signature(&self, provider: &SignatureProviderWrap) -> Result<bool> {
         if self.signature.is_empty() {
-            return Err(format!("signature field is empty"))
+            return Err(Error::EmptySignature)
         }
 
         match provider {
             SignatureProviderWrap::Ed25519(provider)=> {
-                let sig_bytes = hex::decode(&self.signature).map_err(|e| e.to_string())?;
-                provider.verify(self.seed.as_bytes(), &sig_bytes)
-                    .map_err(|e| e.to_string())
+                let sig_bytes = hex::decode(&self.signature)?;
+                Ok(provider.verify(self.seed.as_bytes(), &sig_bytes)?)
             }
         }
     }

@@ -20,6 +20,7 @@ impl HashProvider for Sha256Provider {
 
 #[test]
 fn sha256_provider_test() {
+    use log::info;
     struct Case<'a> {
         name: &'a str,
         data: &'a[u8],
@@ -50,7 +51,7 @@ fn sha256_provider_test() {
     ];
 
     for case in cases {
-        println!("Testing Case: {}", case.name);
+        info!("Testing Case: {}", case.name);
         let hash_provider = Sha256Provider::new();
         let hash = hash_provider.derive(case.data);
         assert_eq!(case.expected, hash)

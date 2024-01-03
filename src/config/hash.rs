@@ -2,7 +2,7 @@ use alvarium_annotator::constants::Validate;
 use crate::annotations::constants::HashType;
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashInfo {
     #[serde(rename="type")]
     pub hash_type: HashType

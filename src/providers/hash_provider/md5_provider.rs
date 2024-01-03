@@ -20,6 +20,7 @@ impl HashProvider for MD5Provider {
 
 #[test]
 fn md5_provider_test() {
+    use log::info;
     struct Case<'a> {
         name: &'a str,
         data: &'a[u8],
@@ -51,7 +52,7 @@ fn md5_provider_test() {
 
     let hash_provider = MD5Provider::new();
     for case in cases {
-        println!("Testing Case: {}", case.name);
+        info!("Testing Case: {}", case.name);
         let hash = hash_provider.derive(case.data);
         assert_eq!(case.expected, hash)
     }

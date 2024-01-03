@@ -21,9 +21,9 @@
     "type": "iota",
     "config": {
       "provider": {
-        "host": "k1azl2450m.execute-api.us-east-1.amazonaws.com/test",
-        "protocol": "https",
-        "port": 443
+        "host": "localhost",
+        "protocol": "http",
+        "port": 8080
       },
       "tangle": {
         "host": "68.183.204.5",
@@ -33,6 +33,10 @@
       "encoding": "utf-8",
       "topic": "Publisher Unique Topic"
     }
+  },
+  "logging": {
+    "level": "info",
+    "debug_output": "output.log"
   },
   "tls": {
     "cert": "/path/to/cert.pem",

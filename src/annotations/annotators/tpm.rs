@@ -1,9 +1,6 @@
-use crate::annotations::{
-    Annotation,
-    Annotator,
-    constants,
-};
+use crate::annotations::{Annotation, Annotator, constants};
 use crate::config;
+use crate::errors::{Result, Error};
 use alvarium_annotator::{derive_hash, serialise_and_sign};
 
 
@@ -24,7 +21,7 @@ pub struct TpmAnnotator {
 }
 
 impl TpmAnnotator {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator<Error = Error>> {
         Ok(TpmAnnotator {
             hash: cfg.hash.hash_type.clone(),
             kind: constants::ANNOTATION_TPM.clone(),
@@ -62,9 +59,10 @@ impl TpmAnnotator {
 }
 
 impl Annotator for TpmAnnotator {
-    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
+    type Error = crate::errors::Error;
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation> {
         let hasher = new_hash_provider(&self.hash)?;
-        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let signable: std::result::Result<Signable, serde_json::Error> = serde_json::from_slice(data);
         let key = match signable {
             Ok(signable) => derive_hash(hasher, signable.seed.as_bytes()),
             Err(_) => derive_hash(hasher, data),
@@ -77,11 +75,11 @@ impl Annotator for TpmAnnotator {
                 let is_satisfied = self.check_tpm_presence_windows();
 
                 let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), is_satisfied);
-                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
+                let signature = serialise_and_sign(&self.sign, &annotation)?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
-            None => Err(format!("could not retrieve host name"))
+            None => Err(Error::NoHostName)
         }
     }
 }

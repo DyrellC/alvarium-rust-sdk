@@ -1,21 +1,20 @@
-use alvarium_annotator::{
-    Annotator,
-    constants
-};
+use alvarium_annotator::constants;
+use crate::SdkAnnotator;
 use crate::annotations::{PkiAnnotator, SourceAnnotator, TlsAnnotator, TpmAnnotator};
 use crate::config::SdkInfo;
+use crate::errors::{Error, Result};
 
 
-pub fn new_annotator(kind: constants::AnnotationType, cfg: SdkInfo) -> Result<Box<dyn Annotator>, String> {
+pub fn new_annotator(kind: constants::AnnotationType, cfg: SdkInfo) -> Result<Box<SdkAnnotator>> {
     if !kind.is_base_annotation_type() {
-        return Err(format!("not a pre known alvarium annotator {}, please build separate", kind.kind()))
+        return Err(Error::NotKnownProvider(kind.kind().to_string()))
     }
 
     match kind.kind() {
-        "source" => Ok(Box::new(SourceAnnotator::new(&cfg).map_err(|e| e.to_string())?)),
-        "pki" => Ok(Box::new(PkiAnnotator::new(&cfg).map_err(|e| e.to_string())?)),
-        "tls" => Ok(Box::new(TlsAnnotator::new(&cfg).map_err(|e| e.to_string())?)),
-        "tpm" => Ok(Box::new(TpmAnnotator::new(&cfg).map_err(|e| e.to_string())?)),
-        _ => Err(format!("not a pre known alvarium annotator {}, please build separate", kind.kind()))
+        "source" => Ok(Box::new(SourceAnnotator::new(&cfg)?)),
+        "pki" => Ok(Box::new(PkiAnnotator::new(&cfg)?)),
+        "tls" => Ok(Box::new(TlsAnnotator::new(&cfg)?)),
+        "tpm" => Ok(Box::new(TpmAnnotator::new(&cfg)?)),
+        _ => Err(Error::NotKnownProvider(kind.kind().to_string()))
     }
 }

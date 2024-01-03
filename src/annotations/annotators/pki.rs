@@ -7,6 +7,7 @@ use crate::{config::{self, Signable}};
 use crate::providers::sign_provider::SignatureProviderWrap;
 use alvarium_annotator::{derive_hash, serialise_and_sign};
 use crate::factories::{new_hash_provider, new_signature_provider};
+use crate::errors::{Result, Error};
 
 pub struct PkiAnnotator {
     hash: constants::HashType,
@@ -15,7 +16,7 @@ pub struct PkiAnnotator {
 }
 
 impl PkiAnnotator {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator, String> {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator<Error = Error>> {
         Ok(PkiAnnotator {
             hash: cfg.hash.hash_type.clone(),
             kind: constants::ANNOTATION_PKI.clone(),
@@ -25,9 +26,10 @@ impl PkiAnnotator {
 }
 
 impl Annotator for PkiAnnotator {
-    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
+    type Error = crate::errors::Error;
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation> {
         let hasher = new_hash_provider(&self.hash)?;
-        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let signable: std::result::Result<Signable, serde_json::Error> = serde_json::from_slice(data);
         let (verified, key) = match signable {
             Ok(signable) => {
                 let key = derive_hash(hasher, signable.seed.as_bytes());
@@ -38,11 +40,11 @@ impl Annotator for PkiAnnotator {
         match gethostname::gethostname().to_str() {
             Some(host) => {
                 let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), verified);
-                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
+                let signature = serialise_and_sign(&self.sign, &annotation)?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
-            None => Err(format!("could not retrieve host name"))
+            None => Err(Error::NoHostName)
         }
     }
 }
@@ -50,6 +52,7 @@ impl Annotator for PkiAnnotator {
 
 #[cfg(test)]
 mod pki_tests {
+    use log::info;
     use crate::{config, providers::sign_provider::get_priv_key};
     use crate::annotations::{Annotator, PkiAnnotator, constants};
     use crate::config::Signable;
@@ -82,7 +85,7 @@ mod pki_tests {
     fn make_pki_annotation() {
         let config: config::SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
 
-        println!("config {}", config.signature.private_key_info.path);
+        info!("config {}", config.signature.private_key_info.path);
         let data = String::from("Some random data");
         let priv_key_file = std::fs::read(&config.signature.private_key_info.path).unwrap();
         let priv_key_string = String::from_utf8(priv_key_file).unwrap();

@@ -1,11 +1,8 @@
 #[cfg(feature = "rustls")]
 use std::io::Read;
-use crate::annotations::{
-    Annotation,
-    Annotator,
-    constants,
-};
+use crate::annotations::{Annotation, Annotator, constants};
 use crate::config;
+use crate::errors::{Result, Error};
 use alvarium_annotator::{derive_hash, serialise_and_sign};
 
 
@@ -16,6 +13,7 @@ use rustls::Connection;
 use std::net::TcpStream;
 #[cfg(feature = "native-tls")]
 use std::sync::Mutex;
+use log::info;
 use crate::config::Signable;
 use crate::factories::{new_hash_provider, new_signature_provider};
 use crate::providers::sign_provider::SignatureProviderWrap;
@@ -36,7 +34,7 @@ pub struct TlsAnnotator{
 }
 
 impl TlsAnnotator {
-    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator + Tls, String> {
+    pub fn new(cfg: &config::SdkInfo) -> Result<impl Annotator<Error = Error> + Tls> {
         Ok(TlsAnnotator {
             hash: cfg.hash.hash_type.clone(),
             kind: constants::ANNOTATION_TLS.clone(),
@@ -86,9 +84,9 @@ impl Tls for TlsAnnotator {
     #[cfg(feature = "rustls")]
     fn check_tls_stream_rustls(&mut self) -> bool {
         if let Some(stream) = self.stream.as_mut() {
-            println!("Stream exists");
+            info!("Stream exists");
             if let Some(conn) = self.conn_rustls.as_mut() {
-                println!("Connection exists");
+                info!("Connection exists");
                 let mut buf = [0; 1024];
                 let mut retries = 0;
 
@@ -121,11 +119,11 @@ impl Tls for TlsAnnotator {
                         match e.kind() {
                             std::io::ErrorKind::WouldBlock => true,
                             std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => {
-                                println!("Connection error in TLS stream: {:?}", e);
+                                info!("Connection error in TLS stream: {:?}", e);
                                 false
                             },
                             _ => {
-                                println!("Unexpected error in TLS stream: {:?}", e);
+                                info!("Unexpected error in TLS stream: {:?}", e);
                                 false
                             }
                         }
@@ -144,9 +142,10 @@ impl Tls for TlsAnnotator {
 
 // Create a TLS Server Connection instance to determine if it is being used
 impl Annotator for TlsAnnotator {
-    fn annotate(&mut self, data: &[u8]) -> Result<Annotation, String> {
+    type Error = crate::errors::Error;
+    fn annotate(&mut self, data: &[u8]) -> Result<Annotation> {
         let hasher = new_hash_provider(&self.hash)?;
-        let signable: Result<Signable, serde_json::Error> = serde_json::from_slice(data);
+        let signable: std::result::Result<Signable, serde_json::Error> = serde_json::from_slice(data);
         let key = match signable {
             Ok(signable) => derive_hash(hasher, signable.seed.as_bytes()),
             Err(_) => derive_hash(hasher, data),
@@ -159,11 +158,11 @@ impl Annotator for TlsAnnotator {
                 let is_satisfied = self.check_tls_stream_rustls();
 
                 let mut annotation = Annotation::new(&key, self.hash.clone(), host, self.kind.clone(), is_satisfied);
-                let signature = serialise_and_sign(&self.sign, &annotation).map_err(|e| e.to_string())?;
+                let signature = serialise_and_sign(&self.sign, &annotation)?;
                 annotation.with_signature(&signature);
                 Ok(annotation)
             },
-            None => Err(format!("could not retrieve host name"))
+            None => Err(Error::NoHostName)
         }
     }
 }
