@@ -57,6 +57,9 @@ pub enum Error {
 
     #[error("Failed to make public key from provided bytes")]
     PublicKeyFailure,
+
+    #[error("External error: {0}")]
+    External(String),
 }
 
 impl From<serde_json::Error> for Error {
@@ -111,5 +114,11 @@ impl From<reqwest::Error> for Error {
 impl From<streams::LetsError> for Error {
     fn from(e: streams::LetsError) -> Self {
         Error::StreamsLetsError(e)
+    }
+}
+
+impl From<Box<dyn std::error::Error>> for Error {
+    fn from(e: Box<dyn std::error::Error>) -> Self {
+      Error::External(e.to_string())
     }
 }
