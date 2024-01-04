@@ -78,6 +78,7 @@ impl Publisher for IotaPublisher {
                         let user = User::builder()
                             .with_transport(client)
                             .with_identity(Ed25519::from_seed(seed))
+                            .lean()
                             .build();
 
                         let identifier = user.identifier().unwrap().clone();
@@ -148,7 +149,7 @@ impl Publisher for IotaPublisher {
             .send()
             .await?;
 
-        let backup = self.user.backup("password").await?;
+        let backup = self.user.backup(&self.cfg.backup.password).await?;
         std::fs::write(&self.cfg.backup.path, backup).map_err(|e| Error::BackupFailed(e))?;
         info!("Published new message: {}", packet.address());
         Ok(())
