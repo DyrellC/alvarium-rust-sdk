@@ -78,7 +78,6 @@ impl Publisher for IotaPublisher {
                         let user = User::builder()
                             .with_transport(client)
                             .with_identity(Ed25519::from_seed(seed))
-                            .lean()
                             .build();
 
                         let identifier = user.identifier().unwrap().clone();
