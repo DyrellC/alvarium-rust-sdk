@@ -14,7 +14,7 @@ const MAX_RETRIES: u8 = 100;
 
 pub struct IotaPublisher {
     cfg: IotaStreamsConfig,
-    subscriber: User<Client>,
+    user: User<Client>,
     identifier: Identifier,
 }
 
@@ -24,7 +24,7 @@ impl IotaPublisher {
         let mut i = 0;
         info!("Awaiting Keyload message from publisher");
         while i < MAX_RETRIES {
-            let m = self.subscriber.messages();
+            let m = self.user.messages();
             if let Ok(next_messages) = m.try_collect::<Vec<Message>>().await {
                 for message in next_messages {
                     debug!("Found message: {}", message.address);
@@ -39,11 +39,11 @@ impl IotaPublisher {
             sleep(Duration::from_secs(5));
             i += 1;
         }
-        Err(crate::errors::Error::StreamsKeyloadNotFound)
+        Err(Error::StreamsKeyloadNotFound)
     }
 
     pub fn client(&mut self) -> &mut User<Client> {
-        &mut self.subscriber
+        &mut self.user
     }
 
     pub fn identifier(&self) -> &Identifier {
@@ -61,12 +61,12 @@ impl Publisher for IotaPublisher {
                 let client = Client::new(cfg.tangle_node.uri());
                 match std::fs::read(&cfg.backup.path) {
                     Ok(user_bytes) => {
-                        let subscriber = User::restore(user_bytes, &cfg.backup.password, client).await?;
-                        let identifier = subscriber.identifier().unwrap().clone();
+                        let user = User::restore(user_bytes, &cfg.backup.password, client).await?;
+                        let identifier = user.identifier().unwrap().clone();
                         Ok(
                             IotaPublisher {
                                 cfg: cfg.clone(),
-                                subscriber,
+                                user,
                                 identifier
                             }
                         )
@@ -75,17 +75,17 @@ impl Publisher for IotaPublisher {
                         let mut seed = [0u8; 64];
                         crypto::utils::rand::fill(&mut seed).unwrap();
 
-                        let subscriber = User::builder()
+                        let user = User::builder()
                             .with_transport(client)
                             .with_identity(Ed25519::from_seed(seed))
                             .lean()
                             .build();
 
-                        let identifier = subscriber.identifier().unwrap().clone();
+                        let identifier = user.identifier().unwrap().clone();
                         Ok(
                             IotaPublisher {
                                 cfg: cfg.clone(),
-                                subscriber,
+                                user,
                                 identifier,
                             }
                         )
@@ -106,33 +106,35 @@ impl Publisher for IotaPublisher {
         Ok(())
     }
     async fn connect(&mut self) -> Result<()> {
-        let announcement = get_announcement_id(&self.cfg.provider.uri()).await?;
-        let announcement_address = Address::from_str(&announcement)?;
-        info!("Announcement address: {}", announcement_address.to_string());
+        if self.user.stream_address().is_none() {
+            let announcement = get_announcement_id(&self.cfg.provider.uri()).await?;
+            let announcement_address = Address::from_str(&announcement)?;
+            info!("Announcement address: {}", announcement_address.to_string());
 
-        debug!("Fetching announcement message");
-        self.subscriber.receive_message(announcement_address).await?;
+            debug!("Fetching announcement message");
+            self.user.receive_message(announcement_address).await?;
 
-        debug!("Sending Streams Subscription message");
-        let subscription = self.subscriber.subscribe().await?;
+            debug!("Sending Streams Subscription message");
+            let subscription = self.user.subscribe().await?;
 
-        #[cfg(feature = "did-streams")]
-        let id_type = 1;
-        #[cfg(not(feature = "did-streams"))]
-        let id_type = 0;
+            #[cfg(feature = "did-streams")]
+                let id_type = 1;
+            #[cfg(not(feature = "did-streams"))]
+                let id_type = 0;
 
-        let body = SubscriptionRequest {
-            address: subscription.address().to_string(),
-            identifier: self.identifier.to_string(),
-            id_type,
-            topic: self.cfg.topic.to_string(),
-        };
+            let body = SubscriptionRequest {
+                address: subscription.address().to_string(),
+                identifier: self.identifier.to_string(),
+                id_type,
+                topic: self.cfg.topic.to_string(),
+            };
 
-        let body_bytes = serde_json::to_vec(&body)?;
+            let body_bytes = serde_json::to_vec(&body)?;
 
-        info!("Sending subscription request to console");
-        send_subscription_request(&self.cfg.provider.uri(), body_bytes).await?;
-        self.await_keyload().await?;
+            info!("Sending subscription request to console");
+            send_subscription_request(&self.cfg.provider.uri(), body_bytes).await?;
+            self.await_keyload().await?;
+        }
         Ok(())
     }
 
@@ -140,15 +142,15 @@ impl Publisher for IotaPublisher {
         debug!("Publishing message: {:?}", msg);
         let bytes = serde_json::to_vec(&msg)?;
 
-        let packet = self.subscriber.message()
+        let packet = self.user.message()
             .with_payload(bytes)
             .with_topic(self.cfg.topic.as_str())
             .signed()
             .send()
             .await?;
 
-        let backup = self.subscriber.backup("password").await?;
-        std::fs::write("temp_file", backup).map_err(|e| Error::BackupFailed(e))?;
+        let backup = self.user.backup("password").await?;
+        std::fs::write(&self.cfg.backup.path, backup).map_err(|e| Error::BackupFailed(e))?;
         info!("Published new message: {}", packet.address());
         Ok(())
     }
@@ -242,7 +244,7 @@ mod iota_test {
     async fn streams_provider_restore() {
         let sdk_info: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
         let mut provider = mock_provider(sdk_info.clone()).await;
-        let backup = provider.subscriber.backup("password").await.unwrap();
+        let backup = provider.user.backup("password").await.unwrap();
         std::fs::write("temp_file", backup).unwrap();
         // If it made it here it's already confirmed that this is the case
         if let StreamConfig::IotaStreams(_config) = &sdk_info.stream.config {
