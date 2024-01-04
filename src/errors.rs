@@ -59,6 +59,9 @@ pub enum Error {
 
     #[error("External error: {0}")]
     External(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Backup failed: {0}")]
+    BackupFailed(std::io::Error)
 }
 
 impl From<serde_json::Error> for Error {

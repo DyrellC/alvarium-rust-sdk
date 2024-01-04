@@ -7,7 +7,7 @@ use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use futures::TryStreamExt;
 use log::{debug, info};
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 const MAX_RETRIES: u8 = 100;
 
@@ -78,6 +78,7 @@ impl Publisher for IotaPublisher {
                         let subscriber = User::builder()
                             .with_transport(client)
                             .with_identity(Ed25519::from_seed(seed))
+                            .lean()
                             .build();
 
                         let identifier = subscriber.identifier().unwrap().clone();
@@ -91,7 +92,7 @@ impl Publisher for IotaPublisher {
                     }
                 }
             },
-            _ => Err(crate::errors::Error::IncorrectConfig)
+            _ => Err(Error::IncorrectConfig)
         }
     }
 
@@ -146,6 +147,8 @@ impl Publisher for IotaPublisher {
             .send()
             .await?;
 
+        let backup = self.subscriber.backup("password").await?;
+        std::fs::write("temp_file", backup).map_err(|e| Error::BackupFailed(e))?;
         info!("Published new message: {}", packet.address());
         Ok(())
     }
@@ -232,6 +235,7 @@ mod iota_test {
 
         info!("Publishing...");
         publisher.publish(data).await.unwrap();
+        std::fs::remove_file("temp_file").unwrap();
     }
 
     #[tokio::test]

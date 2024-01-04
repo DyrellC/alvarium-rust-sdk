@@ -130,6 +130,7 @@ mod sdk_tests {
         sdk.create(signable.to_bytes().as_slice()).await.unwrap();
         sdk.transit(signable.to_bytes().as_slice()).await.unwrap();
         sdk.publish(signable.to_bytes().as_slice()).await.unwrap();
+        std::fs::remove_file("temp_file").unwrap();
     }
 
     #[tokio::test]
@@ -157,6 +158,7 @@ mod sdk_tests {
         let sig = hex::encode([0u8; crypto::signatures::ed25519::SIGNATURE_LENGTH]);
         let signable = Signable::new(data, sig);
         sdk.mutate(old_data.as_bytes(), signable.to_bytes().as_slice()).await.unwrap();
+        std::fs::remove_file("temp_file").unwrap();
     }
 
     // Mocks Pub::new() with IotaPublisher Annotator
