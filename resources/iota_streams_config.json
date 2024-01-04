@@ -12,6 +12,10 @@
         "port": 443
       },
       "encoding": "utf-8",
-      "topic": "Publisher Unique Topic"
+      "topic": "Publisher Unique Topic",
+      "backup": {
+        "path": "temp_file",
+        "password": "password"
+      }
     }
 }

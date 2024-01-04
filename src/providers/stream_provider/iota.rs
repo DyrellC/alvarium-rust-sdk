@@ -59,22 +59,37 @@ impl Publisher for IotaPublisher {
         match &cfg.config {
             StreamConfig::IotaStreams(cfg) => {
                 let client = Client::new(cfg.tangle_node.uri());
-                let mut seed = [0u8; 64];
-                crypto::utils::rand::fill(&mut seed).unwrap();
+                match std::fs::read(&cfg.backup.path) {
+                    Ok(user_bytes) => {
+                        let subscriber = User::restore(user_bytes, &cfg.backup.password, client).await?;
+                        let identifier = subscriber.identifier().unwrap().clone();
+                        Ok(
+                            IotaPublisher {
+                                cfg: cfg.clone(),
+                                subscriber,
+                                identifier
+                            }
+                        )
+                    },
+                    Err(_) => {
+                        let mut seed = [0u8; 64];
+                        crypto::utils::rand::fill(&mut seed).unwrap();
 
-                let subscriber = User::builder()
-                    .with_transport(client)
-                    .with_identity(Ed25519::from_seed(seed))
-                    .build();
+                        let subscriber = User::builder()
+                            .with_transport(client)
+                            .with_identity(Ed25519::from_seed(seed))
+                            .build();
 
-                let identifier = subscriber.identifier().unwrap().clone();
-                Ok(
-                    IotaPublisher {
-                        cfg: cfg.clone(),
-                        subscriber,
-                        identifier,
+                        let identifier = subscriber.identifier().unwrap().clone();
+                        Ok(
+                            IotaPublisher {
+                                cfg: cfg.clone(),
+                                subscriber,
+                                identifier,
+                            }
+                        )
                     }
-                )
+                }
             },
             _ => Err(crate::errors::Error::IncorrectConfig)
         }
@@ -216,7 +231,22 @@ mod iota_test {
         };
 
         info!("Publishing...");
-        publisher.publish(data).await.unwrap()
+        publisher.publish(data).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streams_provider_restore() {
+        let sdk_info: SdkInfo = serde_json::from_slice(crate::CONFIG_BYTES.as_slice()).unwrap();
+        let mut provider = mock_provider(sdk_info.clone()).await;
+        let backup = provider.subscriber.backup("password").await.unwrap();
+        std::fs::write("temp_file", backup).unwrap();
+        // If it made it here it's already confirmed that this is the case
+        if let StreamConfig::IotaStreams(_config) = &sdk_info.stream.config {
+            // If no backup is available, then the restored publisher will have a new identity
+            let restored = IotaPublisher::new(&sdk_info.stream).await.unwrap();
+            assert!(restored.identifier.eq(provider.identifier()));
+            std::fs::remove_file("temp_file").unwrap();
+        }
     }
 
     async fn mock_provider(sdk_info: SdkInfo) -> IotaPublisher {

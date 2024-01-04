@@ -3,6 +3,7 @@ use crate::config::UrlInfo;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IotaStreamsConfig {
+    pub backup: IotaStreamsBackup,
     pub provider: UrlInfo,
     #[serde(rename="tangle")]
     pub tangle_node: UrlInfo,
@@ -10,3 +11,8 @@ pub struct IotaStreamsConfig {
     pub topic: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IotaStreamsBackup {
+    pub path: String,
+    pub password: String,
+}
