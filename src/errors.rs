@@ -1,7 +1,6 @@
 use thiserror::Error;
 pub type Result<T> = core::result::Result<T, Error>;
 
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Fern error: {0}")]
@@ -59,7 +58,7 @@ pub enum Error {
     PublicKeyFailure,
 
     #[error("External error: {0}")]
-    External(String),
+    External(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl From<serde_json::Error> for Error {
@@ -114,11 +113,5 @@ impl From<reqwest::Error> for Error {
 impl From<streams::LetsError> for Error {
     fn from(e: streams::LetsError) -> Self {
         Error::StreamsLetsError(e)
-    }
-}
-
-impl From<Box<dyn std::error::Error>> for Error {
-    fn from(e: Box<dyn std::error::Error>) -> Self {
-      Error::External(e.to_string())
     }
 }

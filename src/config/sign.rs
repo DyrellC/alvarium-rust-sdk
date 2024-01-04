@@ -4,14 +4,14 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SignatureInfo {
     #[serde(rename="public")]
-    pub(crate) public_key_info: KeyInfo,
+    pub public_key_info: KeyInfo,
     #[serde(rename="private")]
-    pub(crate) private_key_info: KeyInfo,
+    pub private_key_info: KeyInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KeyInfo {
     #[serde(rename="type")]
-    pub(crate) key_type: KeyAlgorithm,
-    pub(crate) path: String
+    pub key_type: KeyAlgorithm,
+    pub path: String
 }
